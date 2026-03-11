@@ -8,6 +8,37 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QFont, QPixmap
 
 
+class MapListWidget(QWidget):
+    """Compact scrollable column showing map names, optionally with MAPINFO titles."""
+
+    def __init__(self):
+        super().__init__()
+        self.setFixedWidth(180)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        lbl = QLabel("MAPS")
+        lbl.setObjectName("sectionLabel")
+        layout.addWidget(lbl)
+
+        self.text = QTextEdit()
+        self.text.setObjectName("mapListText")
+        self.text.setReadOnly(True)
+        self.text.setMinimumHeight(80)
+        self.text.setMaximumHeight(125)
+        self.text.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        layout.addWidget(self.text)
+
+    def set_maps(self, map_list_str):
+        """map_list_str is a newline-separated string from the DB, or empty."""
+        if map_list_str:
+            self.text.setPlainText(map_list_str)
+        else:
+            self.text.setPlainText("")
+        self.setVisible(bool(map_list_str))
+
+
 class TagChip(QWidget):
     removed = pyqtSignal(str)
 
@@ -199,10 +230,14 @@ class WadDetailPanel(QWidget):
                     self.lbl_game, self.lbl_maps, self.lbl_played]:
             meta_layout.addWidget(row)
 
-        # Meta + TITLEPIC side-by-side
+        # Meta + map list + TITLEPIC side-by-side
         meta_and_pic = QHBoxLayout()
         meta_and_pic.setSpacing(16)
         meta_and_pic.addWidget(self.meta_widget, 1)
+
+        self.map_list_widget = MapListWidget()
+        self.map_list_widget.hide()
+        meta_and_pic.addWidget(self.map_list_widget, 0, Qt.AlignmentFlag.AlignTop)
 
         self.titlepic_label = QLabel()
         self.titlepic_label.setObjectName("titlepicLabel")
@@ -333,6 +368,16 @@ class WadDetailPanel(QWidget):
                 border-radius: 3px;
             }
 
+            #mapListText {
+                background: #111;
+                border: 1px solid #2a2a2a;
+                border-radius: 3px;
+                color: #aaa;
+                font-family: 'Courier New', monospace;
+                font-size: 11px;
+                padding: 6px;
+            }
+
             #descText {
                 background: #1a1a1a;
                 border: 1px solid #2a2a2a;
@@ -395,6 +440,14 @@ class WadDetailPanel(QWidget):
         self.lbl_played._val_label.setText(lp[:16].replace("T", " ") if lp else "Never")
 
         self.desc_text.setPlainText(wad.get("description") or "No description available.")
+
+        ml = wad.get("map_list") or ""
+        self.map_list_widget.set_maps(ml)
+        if ml:
+            self.map_list_widget.show()
+        else:
+            self.map_list_widget.hide()
+
         self.tags_widget.set_tags(tags)
 
         tp = wad.get("titlepic_path")

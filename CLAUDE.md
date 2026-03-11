@@ -23,6 +23,7 @@ wad-evoker/
 ├── main.py                  # Entry point — boots QApplication, inits DB, shows MainWindow
 ├── db.py                    # All SQLite logic (CRUD for wads + tags)
 ├── titlepic.py              # TITLEPIC extraction: WAD (omgifol) + PK3 (zip strategies) → cached PNG
+├── maplist.py               # Map list extraction: WAD/PK3 via omgifol, MAPINFO/ZMAPINFO/UMAPINFO parsing
 ├── wad_importer.py          # File import: .wad, .pk3, .zip extraction + .txt metadata parser
 ├── sourceport.py            # Source port config (read/write binary path) + subprocess launch
 ├── version.py               # Single source of truth for __version__ (e.g. "1.0.0")
@@ -66,6 +67,7 @@ CREATE TABLE wads (
     year        TEXT,
     game        TEXT,
     map_count     TEXT,
+    map_list      TEXT,
     titlepic_path TEXT,
     added_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_played   TIMESTAMP
@@ -97,6 +99,7 @@ CREATE TABLE tags (
 
 - Parses idgames-archive-format `.txt` files (key `:` value lines)
 - Field map: `title`, `author`, `description`, `year`, `game`, `number of levels / map count / levels released → map_count`
+- After copy, `maplist.extract_maps(dest)` is called and the result stored as `map_list` (newline-separated string)
 - Falls back to `title_from_filename()` (underscore/dash → spaces, title-cased) if no title found
 - Continuation lines (indented or non-key lines after a key) are appended to the previous value
 
@@ -166,6 +169,7 @@ CREATE TABLE tags (
 - [x] Search (title, author, tags)
 - [x] Delete from library (file on disk preserved)
 - [x] **TITLEPIC extraction** — `titlepic.py` extracts via `omgifol` for `.wad`; for `.pk3` tries direct PNG/JPG, raw Doom graphic lump, then embedded `.wad`. Cached as PNG under `titlepics/`. Displayed as background on Recent cards and alongside metadata in the detail panel. Lazy extraction on first select for pre-existing library entries.
+- [x] **Map list display** — `maplist.py` uses `omgifol` to enumerate all map marker lumps (`MAP##` / `E#M#`) from the WAD. If a `MAPINFO`, `ZMAPINFO`, or `UMAPINFO` lump is present, it is parsed to produce `MAP01: Level Name` formatted lines; otherwise plain map names are used. The result is stored as a newline-separated `map_list` TEXT column in the DB. In the detail panel a `MapListWidget` (compact scrollable `QTextEdit`, 180 px wide) appears as a new column between the meta rows and the TITLEPIC, and is hidden automatically when no map data is available. Lazy extraction runs on WAD select for pre-existing library entries (mirrors titlepic pattern).
 
 ## Planned / Nice-to-Haves (not yet implemented)
 
@@ -179,7 +183,7 @@ CREATE TABLE tags (
 - [ ] **Edit metadata** — in-app editing of title, author, description fields
 - [ ] **Sort / filter** — sort library by title, date added, last played; filter by tag
 - [ ] **Packaging** — `pyproject.toml`, `.desktop` file for Linux app launcher integration, optional PyInstaller bundle
-- [ ] Add maplist display, with support for MAPINFO to get the maps names (if available, if not just display the maps that are modified in the custom wad)
+- [x] Add maplist display, with support for MAPINFO to get the maps names (if available, if not just display the maps that are modified in the custom wad)
 
 ---
 

@@ -11,6 +11,7 @@ import db
 import sourceport
 import wad_importer
 import titlepic
+import maplist
 from updater import UpdateCheckWorker, UpdateDownloadWorker, restart_app
 from version import __version__
 from ui.wad_list import WadListWidget
@@ -237,6 +238,7 @@ class MainWindow(QMainWindow):
                 year=meta.get("year"),
                 game=meta.get("game"),
                 map_count=meta.get("map_count"),
+                map_list=r.get("map_list"),
                 titlepic_path=r.get("titlepic_path"),
             )
             if wad:
@@ -256,12 +258,18 @@ class MainWindow(QMainWindow):
 
     def _on_wad_selected(self, wad):
         tags = db.get_tags(wad["id"])
+        wad = dict(wad)
         if not wad.get("titlepic_path"):
             path = titlepic.extract_titlepic(wad["filepath"])
             if path:
                 db.update_titlepic(wad["id"], path)
-                wad = dict(wad)
                 wad["titlepic_path"] = path
+        if not wad.get("map_list"):
+            maps = maplist.extract_maps(wad["filepath"])
+            if maps:
+                ml = maplist.format_map_list(maps)
+                db.update_map_list(wad["id"], ml)
+                wad["map_list"] = ml
         self.detail_panel.show_wad(wad, tags)
 
     def _on_launch(self, wad_id, wad_filepath):

@@ -3,6 +3,7 @@ import re
 import shutil
 import zipfile
 import titlepic
+import maplist
 
 WAD_DIR = os.path.expanduser("~/.config/wad-evoker/wads")
 
@@ -35,11 +36,13 @@ def _import_single(source_path):
     dest = _unique_dest(filename)
     shutil.copy2(source_path, dest)
     txt_meta = _find_and_parse_txt(os.path.dirname(source_path), filename)
+    maps = maplist.extract_maps(dest)
     return {
         "filepath": dest,
         "filename": filename,
         "metadata": txt_meta,
         "titlepic_path": titlepic.extract_titlepic(dest),
+        "map_list": maplist.format_map_list(maps),
     }
 
 
@@ -60,11 +63,13 @@ def _import_zip(zip_path):
                 dest = _unique_dest(f)
                 shutil.copy2(src, dest)
                 txt_meta = _find_and_parse_txt(root, f)
+                maps = maplist.extract_maps(dest)
                 results.append({
                     "filepath": dest,
                     "filename": f,
                     "metadata": txt_meta,
                     "titlepic_path": titlepic.extract_titlepic(dest),
+                    "map_list": maplist.format_map_list(maps),
                 })
 
     shutil.rmtree(extract_dir, ignore_errors=True)

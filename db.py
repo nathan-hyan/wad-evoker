@@ -26,6 +26,7 @@ def init_db():
             year          TEXT,
             game          TEXT,
             map_count     TEXT,
+            map_list      TEXT,
             titlepic_path TEXT,
             added_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_played   TIMESTAMP
@@ -38,12 +39,16 @@ def init_db():
             UNIQUE(wad_id, tag)
         );
     """)
-    # Migration: add titlepic_path to existing installs
-    try:
-        c.execute("ALTER TABLE wads ADD COLUMN titlepic_path TEXT")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass  # column already exists
+    # Migration: add columns to existing installs
+    for col, typedef in [
+        ("titlepic_path", "TEXT"),
+        ("map_list",      "TEXT"),
+    ]:
+        try:
+            c.execute(f"ALTER TABLE wads ADD COLUMN {col} {typedef}")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # column already exists
     conn.commit()
     conn.close()
 
@@ -51,13 +56,13 @@ def init_db():
 # ── WAD CRUD ──────────────────────────────────────────────────────────────────
 
 def add_wad(title, filename, filepath, author=None, description=None,
-            year=None, game=None, map_count=None, titlepic_path=None):
+            year=None, game=None, map_count=None, map_list=None, titlepic_path=None):
     conn = get_connection()
     try:
         conn.execute(
-            """INSERT INTO wads (title, filename, filepath, author, description, year, game, map_count, titlepic_path)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (title, filename, filepath, author, description, year, game, map_count, titlepic_path)
+            """INSERT INTO wads (title, filename, filepath, author, description, year, game, map_count, map_list, titlepic_path)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (title, filename, filepath, author, description, year, game, map_count, map_list, titlepic_path)
         )
         conn.commit()
         row = conn.execute("SELECT * FROM wads WHERE filepath = ?", (filepath,)).fetchone()
@@ -83,6 +88,16 @@ def get_last_played(limit=5):
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def update_map_list(wad_id, map_list):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE wads SET map_list = ? WHERE id = ?",
+        (map_list, wad_id)
+    )
+    conn.commit()
+    conn.close()
 
 
 def update_titlepic(wad_id, titlepic_path):
