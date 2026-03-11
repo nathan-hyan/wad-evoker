@@ -308,7 +308,7 @@ class MainWindow(QMainWindow):
         self._update_worker.update_available.connect(self._on_update_available)
         self._update_worker.start()
 
-    def _on_update_available(self, latest, zipball_url, html_url):
+    def _on_update_available(self, latest, zipball_url, html_url, appimage_url):
         msg = QMessageBox(self)
         msg.setWindowTitle("Update Available")
         msg.setText(
@@ -320,11 +320,11 @@ class MainWindow(QMainWindow):
         )
         msg.setDefaultButton(QMessageBox.StandardButton.Yes)
         if msg.exec() == QMessageBox.StandardButton.Yes:
-            self._run_update(zipball_url)
+            self._run_update(zipball_url, appimage_url)
 
-    def _run_update(self, zipball_url):
+    def _run_update(self, zipball_url, appimage_url=""):
         self.status.showMessage("Downloading update…")
-        self._download_worker = UpdateDownloadWorker(zipball_url)
+        self._download_worker = UpdateDownloadWorker(zipball_url, appimage_url)
         self._download_worker.finished.connect(self._on_update_downloaded)
         self._download_worker.failed.connect(self._on_update_failed)
         self._download_worker.start()

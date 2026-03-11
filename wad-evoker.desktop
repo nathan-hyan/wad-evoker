@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Name=Wad Evoker
+Comment=WAD library manager for Doom
+Exec=wad-evoker
+Icon=wad-evoker
+Type=Application
+Categories=Game;Utility;
+Terminal=false

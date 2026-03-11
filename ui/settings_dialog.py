@@ -255,6 +255,7 @@ class SettingsDialog(QDialog):
         self.update_status_label.setText("")
         self.btn_update_now.setVisible(False)
         self._pending_zipball_url = None
+        self._pending_appimage_url = ""
 
         self._check_worker = UpdateCheckWorker()
         self._check_worker.update_available.connect(self._on_update_available)
@@ -262,12 +263,13 @@ class SettingsDialog(QDialog):
         self._check_worker.check_failed.connect(self._on_check_failed)
         self._check_worker.start()
 
-    def _on_update_available(self, latest, zipball_url, html_url):
+    def _on_update_available(self, latest, zipball_url, html_url, appimage_url):
         self.btn_check_updates.setEnabled(True)
         self.btn_check_updates.setText("Check for Updates")
         self.update_status_label.setText(f"v{latest} is available!")
         self.update_status_label.setStyleSheet("color: #cc2200;")
         self._pending_zipball_url = zipball_url
+        self._pending_appimage_url = appimage_url
         self.btn_update_now.setVisible(True)
 
     def _on_up_to_date(self, version):
@@ -291,7 +293,7 @@ class SettingsDialog(QDialog):
         self.update_status_label.setText("Downloading update…")
         self.update_status_label.setStyleSheet("color: #ccc;")
 
-        self._download_worker = UpdateDownloadWorker(self._pending_zipball_url)
+        self._download_worker = UpdateDownloadWorker(self._pending_zipball_url, self._pending_appimage_url)
         self._download_worker.finished.connect(self._on_download_finished)
         self._download_worker.failed.connect(self._on_download_failed)
         self._download_worker.start()

@@ -186,9 +186,14 @@ CREATE TABLE tags (
 ## Running
 
 ```bash
-cd wad-evoker
-pip install -r requirements.txt
-python3 main.py
+./run.sh
 ```
+
+`run.sh` handles full environment setup automatically:
+
+1. Checks for `.venv/bin/activate` — if missing, creates the virtual environment via `python3 -m venv`
+2. If venv creation fails (e.g. `ensurepip` not available), detects the Python version and runs `sudo apt-get install -y python3.X-venv` on apt-based systems (Debian/Ubuntu/Kubuntu), then retries
+3. On non-apt systems, prints a clear error and exits
+4. Activates the venv, upgrades `pip`, installs `requirements.txt`, then launches `main.py`
 
 Must be run from inside the `wad-evoker/` directory so Python resolves the `ui` package correctly.
