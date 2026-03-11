@@ -4,13 +4,15 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QLineEdit, QFileDialog,
     QMessageBox, QSplitter, QFrame, QStatusBar
 )
-from PyQt6.QtCore import Qt, QMimeData
+from PyQt6.QtCore import Qt, QMimeData, QTimer
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QFont, QIcon
 
 import db
 import sourceport
 import wad_importer
 import titlepic
+from updater import UpdateCheckWorker, UpdateDownloadWorker, restart_app
+from version import __version__
 from ui.wad_list import WadListWidget
 from ui.wad_detail import WadDetailPanel
 from ui.last_played import LastPlayedBar
@@ -27,6 +29,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._apply_styles()
         self.refresh_library()
+        QTimer.singleShot(2000, self._start_update_check)
 
     # ── UI BUILD ──────────────────────────────────────────────────────────────
 
@@ -299,6 +302,40 @@ class MainWindow(QMainWindow):
     def _on_settings(self):
         dlg = SettingsDialog(self)
         dlg.exec()
+
+    def _start_update_check(self):
+        self._update_worker = UpdateCheckWorker()
+        self._update_worker.update_available.connect(self._on_update_available)
+        self._update_worker.start()
+
+    def _on_update_available(self, latest, zipball_url, html_url):
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Update Available")
+        msg.setText(
+            f"Wad Evoker v{latest} is available (you have v{__version__}).\n\n"
+            "Download and install now?"
+        )
+        msg.setStandardButtons(
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        msg.setDefaultButton(QMessageBox.StandardButton.Yes)
+        if msg.exec() == QMessageBox.StandardButton.Yes:
+            self._run_update(zipball_url)
+
+    def _run_update(self, zipball_url):
+        self.status.showMessage("Downloading update…")
+        self._download_worker = UpdateDownloadWorker(zipball_url)
+        self._download_worker.finished.connect(self._on_update_downloaded)
+        self._download_worker.failed.connect(self._on_update_failed)
+        self._download_worker.start()
+
+    def _on_update_downloaded(self):
+        self.status.showMessage("Update applied. Restarting…")
+        QTimer.singleShot(1000, restart_app)
+
+    def _on_update_failed(self, error):
+        self.status.showMessage(f"Update failed: {error}", 6000)
+        QMessageBox.warning(self, "Update Failed", f"Could not apply update:\n{error}")
 
     def refresh_library(self):
         wads = db.get_all_wads()

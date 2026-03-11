@@ -25,6 +25,8 @@ wad-evoker/
 ├── titlepic.py              # TITLEPIC extraction: WAD (omgifol) + PK3 (zip strategies) → cached PNG
 ├── wad_importer.py          # File import: .wad, .pk3, .zip extraction + .txt metadata parser
 ├── sourceport.py            # Source port config (read/write binary path) + subprocess launch
+├── version.py               # Single source of truth for __version__ (e.g. "1.0.0")
+├── updater.py               # Auto-update: GitHub release check, zip download, file replacement, restart
 ├── requirements.txt         # PyQt6, omgifol, Pillow
 ├── README.md
 └── ui/
@@ -167,6 +169,7 @@ CREATE TABLE tags (
 
 ## Planned / Nice-to-Haves (not yet implemented)
 
+- [x] **Auto-update** — `updater.py` checks `https://api.github.com/repos/exequiel-mleziva/wad-evoker/releases/latest` on boot (2 s delay, background `QThread`). If a newer tag exists, user is prompted to install; download replaces app files in-place and `os.execv` restarts. Settings dialog exposes a **Check for Updates** button with inline status feedback and an **Update Now** button.
 - [ ] **Multiple named source port profiles** — e.g. "GZDoom", "DSDA", "Crispy" selectable per-launch or as default
 - [ ] **Time played tracking** — store `play_duration_seconds` in `wads` table; hook into process monitoring via `subprocess` + `time`
 - [ ] **Screenshot support** — store screenshot paths, display in detail panel
