@@ -6,9 +6,19 @@ VENV_DIR="$SCRIPT_DIR/.venv"
 
 cd "$SCRIPT_DIR"
 
-if [ ! -d "$VENV_DIR" ]; then
+if [ ! -f "$VENV_DIR/bin/activate" ]; then
     echo "[wad-evoker] Creating virtual environment..."
-    python3 -m venv "$VENV_DIR"
+    if ! python3 -m venv "$VENV_DIR" 2>/dev/null; then
+        if command -v apt-get &>/dev/null; then
+            PY_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+            echo "[wad-evoker] Installing python${PY_VER}-venv..."
+            sudo apt-get install -y "python${PY_VER}-venv"
+            python3 -m venv "$VENV_DIR"
+        else
+            echo "[wad-evoker] ERROR: Could not create virtual environment. Please install python3-venv manually." >&2
+            exit 1
+        fi
+    fi
 fi
 
 source "$VENV_DIR/bin/activate"
