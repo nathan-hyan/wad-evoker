@@ -8,23 +8,38 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Read version from version.py
+      - name: Bump patch version and push
         id: version
         run: |
-          VERSION=$(python3 -c "
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          CURRENT=$(python3 -c "
           import re
           content = open('version.py').read()
           print(re.search(r'__version__\s*=\s*[\'\"](.*?)[\'\"]', content).group(1))
           ")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+
+          echo "__version__ = \"$NEW_VERSION\"" > version.py
+
+          git add version.py
+          git commit -m "chore: bump version to $NEW_VERSION"
+          git push
+
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
 
       - name: Check if tag already exists
         id: tag_check
