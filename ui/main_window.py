@@ -230,6 +230,7 @@ class MainWindow(QMainWindow):
     def _import_path(self, path):
         results = wad_importer.import_file(path)
         imported = 0
+        last_imported_id = None
         for r in results:
             meta = r["metadata"]
             title = meta.get("title") or wad_importer.title_from_filename(r["filename"])
@@ -247,9 +248,13 @@ class MainWindow(QMainWindow):
             )
             if wad:
                 imported += 1
+                last_imported_id = wad["id"]
         if imported:
             self.status.showMessage(f"Imported {imported} WAD(s).", 4000)
+            self.detail_panel.clear()
             self.refresh_library()
+            if last_imported_id:
+                self.wad_list.select_wad_by_id(last_imported_id)
         else:
             self.status.showMessage("No new WADs imported (already in library or unsupported).", 4000)
 
@@ -261,12 +266,16 @@ class MainWindow(QMainWindow):
         self.wad_list.populate(wads)
 
     def _on_wad_selected(self, wad):
-        tags = db.get_tags(wad["id"])
-        wad = dict(wad)
+        wad_id = wad["id"]
+        wad = db.get_wad_by_id(wad_id)
+        if not wad:
+            return
+        
+        tags = db.get_tags(wad_id)
         if not wad.get("titlepic_path"):
             path = titlepic.extract_titlepic(wad["filepath"])
             if path:
-                db.update_titlepic(wad["id"], path)
+                db.update_titlepic(wad_id, path)
                 wad["titlepic_path"] = path
 
         ml_existing = wad.get("map_list") or ""
@@ -275,7 +284,7 @@ class MainWindow(QMainWindow):
             maps = maplist.extract_maps(wad["filepath"])
             if maps:
                 ml = maplist.format_map_list(maps)
-                db.update_map_list(wad["id"], ml)
+                db.update_map_list(wad_id, ml)
                 wad["map_list"] = ml
         self.detail_panel.show_wad(wad, tags)
 

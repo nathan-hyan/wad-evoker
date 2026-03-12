@@ -95,10 +95,6 @@ def _find_and_parse_txt(directory, wad_filename):
     for fname in os.listdir(directory):
         if fname.lower().endswith(".txt") and fname.lower().startswith(base.lower()):
             return parse_txt(os.path.join(directory, fname))
-    # fallback: any txt in the same dir
-    for fname in os.listdir(directory):
-        if fname.lower().endswith(".txt"):
-            return parse_txt(os.path.join(directory, fname))
     return {}
 
 

@@ -185,14 +185,16 @@ CREATE TABLE tags (
 - [x] **Map list display** — `maplist.py` uses `omgifol` to enumerate all map marker lumps (`MAP##` / `E#M#`) from the WAD. If a `MAPINFO`, `ZMAPINFO`, or `UMAPINFO` lump is present, it is parsed to produce `MAP01: Level Name` formatted lines; otherwise plain map names are used. The result is stored as a newline-separated `map_list` TEXT column in the DB. In the detail panel a `MapListWidget` (full-width scrollable `QTextEdit`, max 200 px tall) is rendered below the Description section and is hidden automatically when no map data is available. Lazy extraction runs on WAD select for pre-existing library entries (mirrors titlepic pattern).
 - [x] **Edit WAD dialog** — `WadEditDialog` allows editing title/author/year/game/description, changing the WAD file path (with a Browse picker), and editing `map_list`. Game uses a fixed dropdown (Doom/Doom 2/TNT/Plutonia). Includes a collapsible side-by-side sidecar `.txt` preview with a manual file picker; preview decoding auto-detects common encodings (notably CP437/CP1252).
 
-## Known bugs / UI/UX Fixes
+## Planned Known bugs to fix / UI/UX to be fixed
 
 - [x] When deleting a WAD entry, the user does not have the choice to hard-delete the .wad, so the .wad is still present in the disk even though there's no entry in the list
 - [ ] Currently, when importing a WAD, the sidecar .txt does not gets imported. It's just added to the database but the file get's separated from the .wad when it should be available. This causes an issue when editing the WAD that causes the .txt panel to never have the necessary info for the user
+- [x] CRITICAL: Sometimes when a wad is drag-n-dropped, instead of displaying the correct metadata for the wad, it displays data from a random wad. Looks like cache'd data but i'm not sure where it's coming from. Right now it appears as Wasted 2: The Crusher with the description: The second in an occassional series of small but tough-ish levels. From the metadata, TITLEPIC is ok, Filename is ok but the rest of the metadata contains the seeminly cache data
 - [x] Auto-updater should be more visible. Right now, if the user get's prompted to update and it clicks "Yes", the only feedback the user has is a "Downloading Update" message at the bottom. It should display a full window with a progress bar displaying the update download's progress. Once that's done, it should restart.
 
 ## Planned / Nice-to-Haves (not yet implemented)
 
+- [ ] **Muti-wad + DEH Support** - Some maps contains multiple wads and a DeHackEd file to improve experience. The idea is for the app to know they're part of a single entry and load them together when launching the entry.
 - [x] **Auto-update** — `updater.py` checks `https://api.github.com/repos/exequiel-mleziva/wad-evoker/releases/latest` on boot (2 s delay, background `QThread`). If a newer tag exists, user is prompted to install; download replaces app files in-place and `os.execv` restarts. Settings dialog exposes a **Check for Updates** button with inline status feedback and an **Update Now** button.
 - [ ] **Multiple named source port profiles** — e.g. "UZDoom", "DSDA", "Crispy" selectable per-launch or as default
 - [ ] **Time played tracking** — store `play_duration_seconds` in `wads` table; hook into process monitoring via `subprocess` + `time`
@@ -256,6 +258,35 @@ When users accepted an update, the only feedback was a "Downloading Update" mess
 - Dialog uses indeterminate progress mode during extraction/installation phases
 - Styled to match the app's dark terminal aesthetic with blood-red progress bar gradient
 - On failure, dialog closes and error is shown via `QMessageBox`
+
+### Stale metadata on drag-and-drop import (fixed)
+
+When a WAD was drag-and-dropped and imported, the detail panel would sometimes display metadata from a previously selected WAD instead of the newly imported one. The TITLEPIC and filename were correct, but title, author, description, and other fields showed cached data from another WAD in the library.
+
+**Root causes**:
+1. **Incorrect .txt sidecar fallback** (`wad_importer.py` → `_find_and_parse_txt`):
+   - When no matching `.txt` file was found for a WAD, the function had a fallback that grabbed **any** `.txt` file in the same directory
+   - This caused WADs without sidecars to inherit metadata from unrelated `.txt` files (e.g., other WADs' sidecars in the same import folder)
+   - Result: WADs imported with completely wrong metadata from random `.txt` files
+
+2. **Stale cached data in list widget** (`ui/main_window.py`):
+   - `WadListWidget.populate()` stores WAD data in `Qt.ItemDataRole.UserRole` for each list item
+   - When `refresh_library()` was called after import, the list was cleared and rebuilt
+   - During this rebuild, Qt's selection mechanism could trigger `currentItemChanged` with stale WAD data
+   - `_on_wad_selected` received this cached dict and displayed it without verifying against the database
+   - The newly imported WAD's ID was never explicitly selected, so the wrong WAD's data persisted in the detail panel
+
+**Fix** (`wad_importer.py` → `_find_and_parse_txt`):
+- Removed the fallback loop that grabbed any `.txt` file in the directory
+- Now only parses `.txt` files that match the WAD filename (e.g., `mymap.txt` for `mymap.wad`)
+- WADs without matching sidecars import with minimal metadata (filename-derived title only), allowing users to fill in details manually
+
+**Fix** (`ui/main_window.py` → `_import_path` and `_on_wad_selected`):
+- Track `last_imported_id` during the import loop to identify the most recently imported WAD
+- Call `detail_panel.clear()` before `refresh_library()` to prevent stale data from being displayed during the refresh
+- After refresh, explicitly select the newly imported WAD by calling `wad_list.select_wad_by_id(last_imported_id)`
+- Modified `_on_wad_selected` to **always fetch fresh data from the database** using `db.get_wad_by_id(wad_id)` instead of trusting the cached dict passed from the list widget
+- This ensures the detail panel always displays current, accurate metadata regardless of list widget state
 
 ---
 
