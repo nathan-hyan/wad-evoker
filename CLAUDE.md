@@ -35,6 +35,7 @@ wad-evoker/
     ├── main_window.py       # Main window: toolbar, drag-drop, search, splitter layout
     ├── wad_list.py          # Left panel: QListWidget of WADs
     ├── wad_detail.py        # Right panel: metadata display, tags, launch button
+    ├── wad_edit_dialog.py   # Modal WAD metadata editor + sidecar .txt preview
     ├── last_played.py       # Top "Recent" horizontal card strip
     └── settings_dialog.py   # Source port binary picker dialog
 ```
@@ -111,6 +112,15 @@ CREATE TABLE tags (
 4. On success: `db.update_last_played(wad_id)` is called, Recent bar refreshes
 5. On failure: `QMessageBox.warning` shown with the error
 
+### Edit metadata flow
+
+1. User selects a WAD and clicks **✎ EDIT** (left of the Launch button)
+2. `WadDetailPanel` emits `edit_requested(wad_id)`
+3. `MainWindow._on_edit` opens `WadEditDialog(wad_id)`
+4. On **Save**, `db.update_wad(...)` updates the editable columns in the `wads` table
+5. Library list is refreshed and the detail panel re-renders the updated WAD
+6. If `titlepic_path` or `map_list` are cleared, the app re-extracts them from the WAD on disk
+
 ### Source port config
 
 - Stored in `~/.config/wad-evoker/config.ini` under `[sourceport] binary = /path/to/binary`
@@ -150,6 +160,7 @@ CREATE TABLE tags (
 | ---------------------------- | ---------------- | ----------------------------------- |
 | `wad_selected(dict)`         | `WadListWidget`  | `MainWindow._on_wad_selected`       |
 | `launch_requested(int, str)` | `WadDetailPanel` | `MainWindow._on_launch`             |
+| `edit_requested(int)`        | `WadDetailPanel` | `MainWindow._on_edit`               |
 | `delete_requested(int)`      | `WadDetailPanel` | `MainWindow._on_delete`             |
 | `tags_changed(int, list)`    | `WadDetailPanel` | `MainWindow._on_tags_changed`       |
 | `wad_launched(dict)`         | `LastPlayedBar`  | `MainWindow._on_launch_from_recent` |
@@ -169,21 +180,46 @@ CREATE TABLE tags (
 - [x] Search (title, author, tags)
 - [x] Delete from library (file on disk preserved)
 - [x] **TITLEPIC extraction** — `titlepic.py` extracts via `omgifol` for `.wad`; for `.pk3` tries direct PNG/JPG, raw Doom graphic lump, then embedded `.wad`. Cached as PNG under `titlepics/`. Displayed as background on Recent cards and alongside metadata in the detail panel. Lazy extraction on first select for pre-existing library entries.
-- [x] **Map list display** — `maplist.py` uses `omgifol` to enumerate all map marker lumps (`MAP##` / `E#M#`) from the WAD. If a `MAPINFO`, `ZMAPINFO`, or `UMAPINFO` lump is present, it is parsed to produce `MAP01: Level Name` formatted lines; otherwise plain map names are used. The result is stored as a newline-separated `map_list` TEXT column in the DB. In the detail panel a `MapListWidget` (compact scrollable `QTextEdit`, 180 px wide) appears as a new column between the meta rows and the TITLEPIC, and is hidden automatically when no map data is available. Lazy extraction runs on WAD select for pre-existing library entries (mirrors titlepic pattern).
+- [x] **Map list display** — `maplist.py` uses `omgifol` to enumerate all map marker lumps (`MAP##` / `E#M#`) from the WAD. If a `MAPINFO`, `ZMAPINFO`, or `UMAPINFO` lump is present, it is parsed to produce `MAP01: Level Name` formatted lines; otherwise plain map names are used. The result is stored as a newline-separated `map_list` TEXT column in the DB. In the detail panel a `MapListWidget` (full-width scrollable `QTextEdit`, max 200 px tall) is rendered below the Description section and is hidden automatically when no map data is available. Lazy extraction runs on WAD select for pre-existing library entries (mirrors titlepic pattern).
+- [x] **Edit WAD dialog** — `WadEditDialog` allows editing title/author/year/game/description, changing the WAD file path (with a Browse picker), and editing `map_list`. Game uses a fixed dropdown (Doom/Doom 2/TNT/Plutonia). Includes a collapsible side-by-side sidecar `.txt` preview with a manual file picker; preview decoding auto-detects common encodings (notably CP437/CP1252).
 
 ## Planned / Nice-to-Haves (not yet implemented)
 
 - [x] **Auto-update** — `updater.py` checks `https://api.github.com/repos/exequiel-mleziva/wad-evoker/releases/latest` on boot (2 s delay, background `QThread`). If a newer tag exists, user is prompted to install; download replaces app files in-place and `os.execv` restarts. Settings dialog exposes a **Check for Updates** button with inline status feedback and an **Update Now** button.
-- [ ] **Multiple named source port profiles** — e.g. "GZDoom", "DSDA", "Crispy" selectable per-launch or as default
+- [ ] **Multiple named source port profiles** — e.g. "UZDoom", "DSDA", "Crispy" selectable per-launch or as default
 - [ ] **Time played tracking** — store `play_duration_seconds` in `wads` table; hook into process monitoring via `subprocess` + `time`
 - [ ] **Screenshot support** — store screenshot paths, display in detail panel
 - [ ] **Stats** — similar to DoomLauncher (https://github.com/nstlaurent/DoomLauncher): kills, deaths, secrets per session
 - [ ] **IWAD selection** — let user specify the base IWAD (`doom2.wad`, `doom.wad`, etc.) passed via `-iwad`
 - [ ] **Extra args per WAD** — store and pass custom launch args (e.g. `-skill 4 -warp 1`)
-- [ ] **Edit metadata** — in-app editing of title, author, description fields
 - [ ] **Sort / filter** — sort library by title, date added, last played; filter by tag
 - [ ] **Packaging** — `pyproject.toml`, `.desktop` file for Linux app launcher integration, optional PyInstaller bundle
 - [x] Add maplist display, with support for MAPINFO to get the maps names (if available, if not just display the maps that are modified in the custom wad)
+
+---
+
+## Known Bugs & Fixes
+
+### MAPINFO `lookup` keyword (fixed)
+
+ZDoom-format MAPINFO files use `map MAP01 lookup "HUSTR_1"` to reference names from the `LANGUAGE` lump. The original quoted-name regex (`map (\w+) "([^"]+)"`) did not account for the `lookup` keyword, so those lines were never matched. The unquoted fallback then matched them and captured the literal word `lookup` as the display name — causing every map to appear as `"lookup"` in the UI.
+
+**Fix** (`maplist.py` → `_parse_mapinfo_text`):
+- Quoted regex updated to `map (\w+) (?:lookup )?"([^"]+)"` — now captures the quoted key regardless of whether `lookup` is present.
+- Unquoted fallback guards against `name.lower() == "lookup"` to prevent the word leaking through if somehow reached.
+
+**Library migration note**:
+- Older DB entries may have stored `map_list` lines where every map name was literally `lookup`. On WAD selection, `MainWindow._on_wad_selected` now refreshes the stored `map_list` if it is empty or contains the substring `lookup`.
+
+### Detail panel — MAPS meta row & map list layout (fixed)
+
+The left metadata column had a redundant `MAPS` row (showing `—`) alongside a 180 px-wide `MapListWidget` squeezed between the metadata and the TITLEPIC image. Map names with long titles were truncated and unreadable.
+
+**Fix** (`ui/wad_detail.py`):
+- Removed the `MAPS` meta row from `_build_ui` and its corresponding assignment in `show_wad`.
+- Removed `setFixedWidth(180)` from `MapListWidget` so it stretches to full panel width.
+- Moved `MapListWidget` out of the `meta_and_pic` `QHBoxLayout` and into the main `detail_layout` directly below the Description section.
+- Increased `MapListWidget` max height from 125 → 200 px.
 
 ---
 

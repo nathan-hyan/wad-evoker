@@ -9,7 +9,7 @@ A minimal, fast WAD library manager and launcher for classic Doom.
 - Reads `.txt` sidecar files for title, author, description, year, game, map count
 - Tag your WADs (e.g. "Finished", "Favourite", "Co-op")
 - "Recent" bar at the top — jump back into a megawad instantly
-- Configurable source port binary — works with GZDoom, DSDA-Doom, Crispy Doom, etc.
+- Configurable source port binary — works with UZDoom, DSDA-Doom, Crispy Doom, etc.
 - Dark, terminal-style UI
 
 ## Requirements
@@ -30,7 +30,7 @@ python main.py
 ## First run
 
 1. Click **⚙** (Settings) in the top-right corner
-2. Set the path to your source port binary (e.g. `/usr/bin/gzdoom` or `/opt/dsda-doom/dsda-doom`)
+2. Set the path to your source port binary (e.g. `/usr/bin/UZDoom` or `/opt/dsda-doom/dsda-doom`)
 3. Click **＋ Add WAD** or drag a `.wad` / `.pk3` / `.zip` onto the window
 4. Select a WAD from the library and click **▶ LAUNCH**
 

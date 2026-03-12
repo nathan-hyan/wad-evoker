@@ -8,14 +8,16 @@ from PyQt6.QtCore import Qt, QMimeData, QTimer
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QFont, QIcon
 
 import db
-import sourceport
-import wad_importer
-import titlepic
 import maplist
+import titlepic
+import wad_importer
+import sourceport
+import updater
 from updater import UpdateCheckWorker, UpdateDownloadWorker, restart_app
 from version import __version__
 from ui.wad_list import WadListWidget
 from ui.wad_detail import WadDetailPanel
+from ui.wad_edit_dialog import WadEditDialog
 from ui.last_played import LastPlayedBar
 from ui.settings_dialog import SettingsDialog
 
@@ -66,6 +68,7 @@ class MainWindow(QMainWindow):
 
         self.detail_panel = WadDetailPanel()
         self.detail_panel.launch_requested.connect(self._on_launch)
+        self.detail_panel.edit_requested.connect(self._on_edit)
         self.detail_panel.delete_requested.connect(self._on_delete)
         self.detail_panel.tags_changed.connect(self._on_tags_changed)
         splitter.addWidget(self.detail_panel)
@@ -264,13 +267,50 @@ class MainWindow(QMainWindow):
             if path:
                 db.update_titlepic(wad["id"], path)
                 wad["titlepic_path"] = path
-        if not wad.get("map_list"):
+
+        ml_existing = wad.get("map_list") or ""
+        map_list_needs_refresh = (not ml_existing.strip()) or ("lookup" in ml_existing.lower())
+        if map_list_needs_refresh:
             maps = maplist.extract_maps(wad["filepath"])
             if maps:
                 ml = maplist.format_map_list(maps)
                 db.update_map_list(wad["id"], ml)
                 wad["map_list"] = ml
         self.detail_panel.show_wad(wad, tags)
+
+    def _on_edit(self, wad_id):
+        wad_before = db.get_wad_by_id(wad_id)
+        if not wad_before:
+            return
+
+        dlg = WadEditDialog(wad_id, self)
+        if dlg.exec() != dlg.DialogCode.Accepted:
+            return
+
+        wad_after = db.get_wad_by_id(wad_id)
+        if not wad_after:
+            return
+
+        titlepic_maybe_changed = (wad_before.get("titlepic_path") != wad_after.get("titlepic_path"))
+        maplist_maybe_changed = (wad_before.get("map_list") != wad_after.get("map_list"))
+
+        if titlepic_maybe_changed and not wad_after.get("titlepic_path"):
+            path = titlepic.extract_titlepic(wad_after.get("filepath"))
+            if path:
+                db.update_titlepic(wad_id, path)
+                wad_after["titlepic_path"] = path
+
+        if maplist_maybe_changed and not wad_after.get("map_list"):
+            maps = maplist.extract_maps(wad_after.get("filepath"))
+            if maps:
+                ml = maplist.format_map_list(maps)
+                db.update_map_list(wad_id, ml)
+                wad_after["map_list"] = ml
+
+        self.refresh_library()
+        tags = db.get_tags(wad_id)
+        self.detail_panel.show_wad(wad_after, tags)
+        self.wad_list.select_wad_by_id(wad_id)
 
     def _on_launch(self, wad_id, wad_filepath):
         ok, err = sourceport.launch_wad(wad_filepath)

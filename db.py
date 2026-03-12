@@ -80,6 +80,13 @@ def get_all_wads():
     return [dict(r) for r in rows]
 
 
+def get_wad_by_id(wad_id):
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM wads WHERE id = ?", (wad_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 def get_last_played(limit=5):
     conn = get_connection()
     rows = conn.execute(
@@ -118,6 +125,36 @@ def update_last_played(wad_id):
     )
     conn.commit()
     conn.close()
+
+
+def update_wad(wad_id, *, title=None, filename=None, filepath=None, author=None,
+               description=None, year=None, game=None, map_count=None, map_list=None,
+               titlepic_path=None):
+    fields = {
+        "title": title,
+        "filename": filename,
+        "filepath": filepath,
+        "author": author,
+        "description": description,
+        "year": year,
+        "game": game,
+        "map_count": map_count,
+        "map_list": map_list,
+        "titlepic_path": titlepic_path,
+    }
+    updates = {k: v for k, v in fields.items() if v is not None}
+    if not updates:
+        return
+
+    sets = ", ".join(f"{k} = ?" for k in updates.keys())
+    params = list(updates.values()) + [wad_id]
+
+    conn = get_connection()
+    try:
+        conn.execute(f"UPDATE wads SET {sets} WHERE id = ?", params)
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def delete_wad(wad_id):

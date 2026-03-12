@@ -5,7 +5,8 @@ import zipfile
 import shutil
 import tempfile
 from urllib.request import urlopen, Request
-from urllib.error import URLError
+from urllib.error import URLError, HTTPError
+import time
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
@@ -13,6 +14,32 @@ from version import __version__
 
 GITHUB_REPO = "nathan-hyan/wad-evoker"
 API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+RELEASES_LATEST_URL = f"https://github.com/{GITHUB_REPO}/releases/latest"
+
+
+def _cache_path():
+    base = os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache")
+    return os.path.join(base, "wad-evoker", "update_check.json")
+
+
+def _read_cache():
+    path = _cache_path()
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _write_cache(payload):
+    path = _cache_path()
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f)
+    except Exception:
+        # Cache failures should never break update checks.
+        pass
 
 
 def _version_tuple(v):
@@ -28,36 +55,90 @@ def is_running_as_appimage():
     return bool(os.environ.get("APPIMAGE"))
 
 
+def _latest_release_tag_via_redirect():
+    """Resolve the latest release tag without using the GitHub API.
+
+    This hits the public /releases/latest endpoint, which redirects to
+    /releases/tag/<tag>. This is significantly less likely to trigger API
+    rate limiting than api.github.com.
+    """
+    req = Request(
+        RELEASES_LATEST_URL,
+        headers={
+            "User-Agent": f"wad-evoker/{__version__}",
+        },
+    )
+    with urlopen(req, timeout=10) as resp:
+        final_url = resp.geturl()
+
+    marker = "/releases/tag/"
+    idx = final_url.find(marker)
+    if idx == -1:
+        raise RuntimeError("Could not resolve latest release tag.")
+    return final_url[idx + len(marker):]
+
+
+def _github_api_headers():
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": f"wad-evoker/{__version__}",
+    }
+    token = (
+        os.environ.get("WAD_EVOKER_GITHUB_TOKEN")
+        or os.environ.get("GITHUB_TOKEN")
+        or os.environ.get("GITHUB_API_TOKEN")
+    )
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
 def check_for_update():
     """Check GitHub for the latest release.
 
     Returns a dict with update info if a newer version exists, or None if
     already up to date. Raises on network/parse errors.
     """
-    req = Request(
-        API_URL,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": f"wad-evoker/{__version__}",
-        },
-    )
-    with urlopen(req, timeout=10) as resp:
-        data = json.loads(resp.read().decode())
+    # Cooldown cache: prevents hammering endpoints if a user repeatedly clicks.
+    cache = _read_cache()
+    now = int(time.time())
+    cooldown_seconds = 60
+    if cache.get("checked_at") and (now - int(cache.get("checked_at", 0)) < cooldown_seconds):
+        cached = cache.get("result")
+        if cached is None:
+            return None
+        if isinstance(cached, dict) and cached.get("latest"):
+            if _version_tuple(cached.get("latest", "")) > _version_tuple(__version__):
+                return cached
+            return None
 
-    tag = data.get("tag_name", "")
+    # Prefer non-API redirect-based check to avoid GitHub API rate limits.
+    tag = _latest_release_tag_via_redirect()
     latest_version = tag.lstrip("v")
-    zipball_url = data.get("zipball_url", "")
-    html_url = data.get("html_url", "")
+    html_url = f"https://github.com/{GITHUB_REPO}/releases/tag/{tag}"
+    zipball_url = f"https://github.com/{GITHUB_REPO}/archive/refs/tags/{tag}.zip"
 
+    # AppImage updates require a stable binary URL. We only consult the GitHub API
+    # to find the AppImage asset when we are actually running as an AppImage.
     appimage_url = ""
-    for asset in data.get("assets", []):
-        name = asset.get("name", "")
-        if name.endswith(".AppImage") and "x86_64" in name:
-            appimage_url = asset.get("browser_download_url", "")
-            break
+    if is_running_as_appimage():
+        req = Request(API_URL, headers=_github_api_headers())
+        try:
+            with urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode())
+            for asset in data.get("assets", []):
+                name = asset.get("name", "")
+                if name.endswith(".AppImage") and "x86_64" in name:
+                    appimage_url = asset.get("browser_download_url", "")
+                    break
+        except HTTPError as e:
+            # If the API is rate limited, still allow non-AppImage update flows.
+            if e.code == 403:
+                raise RuntimeError("GitHub API rate limit exceeded. Try again later or set GITHUB_TOKEN.")
+            raise
 
     if _version_tuple(latest_version) > _version_tuple(__version__):
-        return {
+        result = {
             "current": __version__,
             "latest": latest_version,
             "tag": tag,
@@ -65,6 +146,9 @@ def check_for_update():
             "appimage_url": appimage_url,
             "html_url": html_url,
         }
+        _write_cache({"checked_at": now, "result": result})
+        return result
+    _write_cache({"checked_at": now, "result": None})
     return None
 
 

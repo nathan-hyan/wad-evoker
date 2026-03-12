@@ -42,7 +42,7 @@ class SettingsDialog(QDialog):
 
         desc = QLabel(
             "Choose the executable for your source port.\n"
-            "This can be GZDoom, DSDA-Doom, Crispy Doom, or any compatible port."
+            "This can be UZDoom, DSDA-Doom, Crispy Doom, or any compatible port."
         )
         desc.setObjectName("settingsDesc")
         desc.setWordWrap(True)
@@ -53,7 +53,7 @@ class SettingsDialog(QDialog):
 
         self.binary_input = QLineEdit()
         self.binary_input.setObjectName("binaryInput")
-        self.binary_input.setPlaceholderText("/usr/bin/gzdoom  or  /opt/dsda-doom/dsda-doom  …")
+        self.binary_input.setPlaceholderText("/usr/bin/UZDoom  or  /opt/dsda-doom/dsda-doom  …")
         row.addWidget(self.binary_input, 1)
 
         btn_browse = QPushButton("Browse…")

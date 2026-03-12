@@ -13,7 +13,6 @@ class MapListWidget(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setFixedWidth(180)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
@@ -26,7 +25,7 @@ class MapListWidget(QWidget):
         self.text.setObjectName("mapListText")
         self.text.setReadOnly(True)
         self.text.setMinimumHeight(80)
-        self.text.setMaximumHeight(125)
+        self.text.setMaximumHeight(200)
         self.text.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         layout.addWidget(self.text)
 
@@ -159,6 +158,7 @@ class TagsWidget(QWidget):
 
 class WadDetailPanel(QWidget):
     launch_requested = pyqtSignal(int, str)
+    edit_requested = pyqtSignal(int)
     delete_requested = pyqtSignal(int)
     tags_changed = pyqtSignal(int, list)
 
@@ -206,6 +206,12 @@ class WadDetailPanel(QWidget):
         self.title_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         title_row.addWidget(self.title_label, 1)
 
+        self.btn_edit = QPushButton("✎  EDIT")
+        self.btn_edit.setObjectName("btnEdit")
+        self.btn_edit.setFixedSize(100, 40)
+        self.btn_edit.clicked.connect(self._on_edit)
+        title_row.addWidget(self.btn_edit)
+
         self.btn_launch = QPushButton("▶  LAUNCH")
         self.btn_launch.setObjectName("btnLaunch")
         self.btn_launch.setFixedSize(120, 40)
@@ -223,21 +229,16 @@ class WadDetailPanel(QWidget):
         self.lbl_author   = self._make_meta_row("AUTHOR")
         self.lbl_year     = self._make_meta_row("YEAR")
         self.lbl_game     = self._make_meta_row("GAME")
-        self.lbl_maps     = self._make_meta_row("MAPS")
         self.lbl_played   = self._make_meta_row("LAST PLAYED")
 
         for row in [self.lbl_filename, self.lbl_author, self.lbl_year,
-                    self.lbl_game, self.lbl_maps, self.lbl_played]:
+                    self.lbl_game, self.lbl_played]:
             meta_layout.addWidget(row)
 
         # Meta + map list + TITLEPIC side-by-side
         meta_and_pic = QHBoxLayout()
         meta_and_pic.setSpacing(16)
         meta_and_pic.addWidget(self.meta_widget, 1)
-
-        self.map_list_widget = MapListWidget()
-        self.map_list_widget.hide()
-        meta_and_pic.addWidget(self.map_list_widget, 0, Qt.AlignmentFlag.AlignTop)
 
         self.titlepic_label = QLabel()
         self.titlepic_label.setObjectName("titlepicLabel")
@@ -264,6 +265,10 @@ class WadDetailPanel(QWidget):
         self.desc_text.setReadOnly(True)
         self.desc_text.setMaximumHeight(140)
         detail_layout.addWidget(self.desc_text)
+
+        self.map_list_widget = MapListWidget()
+        self.map_list_widget.hide()
+        detail_layout.addWidget(self.map_list_widget)
 
         # Tags
         self.tags_widget = TagsWidget()
@@ -340,6 +345,23 @@ class WadDetailPanel(QWidget):
                 color: #fff;
             }
             #btnLaunch:pressed { background: #6b0000; }
+
+            #btnEdit {
+                background: #1e1e1e;
+                color: #ccc;
+                border: 2px solid #3a3a3a;
+                border-radius: 3px;
+                font-family: 'Courier New', monospace;
+                font-weight: bold;
+                font-size: 12px;
+                letter-spacing: 2px;
+            }
+            #btnEdit:hover {
+                border-color: #cc2200;
+                color: #ff4422;
+                background: #181818;
+            }
+            #btnEdit:pressed { background: #111; }
 
             #metaKey {
                 color: #666;
@@ -434,7 +456,6 @@ class WadDetailPanel(QWidget):
         self.lbl_author._val_label.setText(wad.get("author") or "—")
         self.lbl_year._val_label.setText(wad.get("year") or "—")
         self.lbl_game._val_label.setText(wad.get("game") or "—")
-        self.lbl_maps._val_label.setText(wad.get("map_count") or "—")
 
         lp = wad.get("last_played")
         self.lbl_played._val_label.setText(lp[:16].replace("T", " ") if lp else "Never")
@@ -473,6 +494,10 @@ class WadDetailPanel(QWidget):
     def _on_launch(self):
         if self._current_wad:
             self.launch_requested.emit(self._current_wad["id"], self._current_wad["filepath"])
+
+    def _on_edit(self):
+        if self._current_wad:
+            self.edit_requested.emit(self._current_wad["id"])
 
     def _on_delete(self):
         if self._current_wad:

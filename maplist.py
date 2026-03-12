@@ -111,10 +111,10 @@ def _parse_mapinfo_text(text):
     """
     result = {}
 
-    # ZDoom / GZDoom style: map MAP01 "Level Name" { ... }
-    # Also covers: map E1M1 "Episode 1 Map 1" { ... }
+    # ZDoom / UZDoom style: map MAP01 "Level Name" { ... }
+    # Also covers: map MAP01 lookup "LANGUAGE_KEY" (ZDoom lookup syntax)
     for m in re.finditer(
-        r'^\s*map\s+(\w+)\s+"([^"]+)"',
+        r'^\s*map\s+(\w+)\s+(?:lookup\s+)?"([^"]+)"',
         text, re.IGNORECASE | re.MULTILINE
     ):
         result[m.group(1).upper()] = m.group(2)
@@ -126,7 +126,7 @@ def _parse_mapinfo_text(text):
             text, re.IGNORECASE | re.MULTILINE
         ):
             name = m.group(2).strip()
-            if name:
+            if name and name.lower() != "lookup":
                 result[m.group(1).upper()] = name
 
     return result if result else None

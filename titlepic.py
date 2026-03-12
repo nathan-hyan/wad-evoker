@@ -64,7 +64,7 @@ def _from_wad(wad_path, cache_path):
 def _from_pk3(pk3_path, cache_path):
     """
     PK3 is a ZIP.  Strategy (in order):
-      1. Direct PNG/JPG named TITLEPIC anywhere in the archive (GZDoom-style).
+      1. Direct PNG/JPG named TITLEPIC anywhere in the archive (UZDoom-style).
       2. Raw Doom-format graphic lump named TITLEPIC inside the archive.
       3. Any embedded .wad inside the PK3 — recurse into it with omgifol.
     """
