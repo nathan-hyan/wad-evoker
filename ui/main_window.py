@@ -20,6 +20,7 @@ from ui.wad_detail import WadDetailPanel
 from ui.wad_edit_dialog import WadEditDialog
 from ui.last_played import LastPlayedBar
 from ui.settings_dialog import SettingsDialog
+from ui.update_progress_dialog import UpdateProgressDialog
 
 
 class MainWindow(QMainWindow):
@@ -327,15 +328,68 @@ class MainWindow(QMainWindow):
         self.wad_list.select_wad_by_id(wad["id"])
 
     def _on_delete(self, wad_id):
-        reply = QMessageBox.question(
-            self, "Remove WAD",
-            "Remove this WAD from the library?\n(The file on disk will NOT be deleted.)",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        wad = db.get_wad_by_id(wad_id)
+        if not wad:
+            return
+
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Remove WAD")
+        msg.setIcon(QMessageBox.Icon.Warning)
+        msg.setText("What would you like to do with this WAD?")
+        msg.setInformativeText(
+            "You can remove it from the library, or also delete the file from disk."
         )
-        if reply == QMessageBox.StandardButton.Yes:
-            db.delete_wad(wad_id)
-            self.detail_panel.clear()
-            self.refresh_library()
+
+        btn_cancel = msg.addButton(QMessageBox.StandardButton.Cancel)
+        btn_remove = msg.addButton("Remove from Library", QMessageBox.ButtonRole.AcceptRole)
+        btn_delete = msg.addButton("Remove + Delete File", QMessageBox.ButtonRole.DestructiveRole)
+        msg.setDefaultButton(btn_remove)
+
+        msg.exec()
+        clicked = msg.clickedButton()
+        if clicked == btn_cancel:
+            return
+
+        want_delete_file = (clicked == btn_delete)
+        wad_path = wad.get("filepath")
+
+        allow_file_delete = False
+        if want_delete_file and wad_path:
+            try:
+                wad_real = os.path.realpath(os.path.abspath(wad_path))
+                managed_dir = os.path.realpath(os.path.abspath(wad_importer.WAD_DIR))
+                allow_file_delete = os.path.commonpath([wad_real, managed_dir]) == managed_dir
+            except Exception:
+                allow_file_delete = False
+
+        if want_delete_file and not allow_file_delete:
+            QMessageBox.warning(
+                self,
+                "Cannot Delete File",
+                "For safety, Wad Evoker only deletes files inside its managed library folder:\n"
+                f"{wad_importer.WAD_DIR}\n\n"
+                "This entry will be removed from the library, but the file will be kept on disk."
+            )
+            want_delete_file = False
+
+        db.delete_wad(wad_id)
+
+        if want_delete_file and wad_path:
+            try:
+                if os.path.exists(wad_path) and os.path.isfile(wad_path):
+                    os.remove(wad_path)
+            except OSError as e:
+                QMessageBox.warning(
+                    self,
+                    "File Delete Failed",
+                    f"Removed from library, but could not delete the file:\n{wad_path}\n\n{e}"
+                )
+
+        self.detail_panel.clear()
+        self.refresh_library()
+        if want_delete_file:
+            self.status.showMessage("WAD removed and file deleted.", 3000)
+        else:
             self.status.showMessage("WAD removed from library.", 3000)
 
     def _on_tags_changed(self, wad_id, tags):
@@ -371,17 +425,34 @@ class MainWindow(QMainWindow):
             self._run_update(zipball_url, appimage_url)
 
     def _run_update(self, zipball_url, appimage_url=""):
-        self.status.showMessage("Downloading update…")
+        self._progress_dialog = UpdateProgressDialog(self)
+        self._progress_dialog.show()
+        
         self._download_worker = UpdateDownloadWorker(zipball_url, appimage_url)
+        self._download_worker.progress.connect(self._on_update_progress)
+        self._download_worker.status_changed.connect(self._on_update_status)
         self._download_worker.finished.connect(self._on_update_downloaded)
         self._download_worker.failed.connect(self._on_update_failed)
         self._download_worker.start()
 
+    def _on_update_progress(self, downloaded, total):
+        if hasattr(self, '_progress_dialog'):
+            self._progress_dialog.set_progress(downloaded, total)
+    
+    def _on_update_status(self, status):
+        if hasattr(self, '_progress_dialog'):
+            self._progress_dialog.set_status(status)
+    
     def _on_update_downloaded(self):
+        if hasattr(self, '_progress_dialog'):
+            self._progress_dialog.set_status("Update complete! Restarting...")
+            self._progress_dialog.set_indeterminate()
         self.status.showMessage("Update applied. Restarting…")
         QTimer.singleShot(1000, restart_app)
 
     def _on_update_failed(self, error):
+        if hasattr(self, '_progress_dialog'):
+            self._progress_dialog.close()
         self.status.showMessage(f"Update failed: {error}", 6000)
         QMessageBox.warning(self, "Update Failed", f"Could not apply update:\n{error}")
 

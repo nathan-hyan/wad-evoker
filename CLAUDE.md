@@ -3,6 +3,8 @@
 A Python + PyQt6 desktop WAD library manager and launcher for classic Doom (1993).
 Dark, terminal-aesthetic UI. Linux-native, but cross-platform via PyQt6 (Windows/macOS compatible).
 
+**⚠️ IMPORTANT**: Always update this file after completing tasks — document fixes, new features, and architectural changes in the appropriate sections below.
+
 ---
 
 ## Stack
@@ -183,6 +185,12 @@ CREATE TABLE tags (
 - [x] **Map list display** — `maplist.py` uses `omgifol` to enumerate all map marker lumps (`MAP##` / `E#M#`) from the WAD. If a `MAPINFO`, `ZMAPINFO`, or `UMAPINFO` lump is present, it is parsed to produce `MAP01: Level Name` formatted lines; otherwise plain map names are used. The result is stored as a newline-separated `map_list` TEXT column in the DB. In the detail panel a `MapListWidget` (full-width scrollable `QTextEdit`, max 200 px tall) is rendered below the Description section and is hidden automatically when no map data is available. Lazy extraction runs on WAD select for pre-existing library entries (mirrors titlepic pattern).
 - [x] **Edit WAD dialog** — `WadEditDialog` allows editing title/author/year/game/description, changing the WAD file path (with a Browse picker), and editing `map_list`. Game uses a fixed dropdown (Doom/Doom 2/TNT/Plutonia). Includes a collapsible side-by-side sidecar `.txt` preview with a manual file picker; preview decoding auto-detects common encodings (notably CP437/CP1252).
 
+## Known bugs / UI/UX Fixes
+
+- [x] When deleting a WAD entry, the user does not have the choice to hard-delete the .wad, so the .wad is still present in the disk even though there's no entry in the list
+- [ ] Currently, when importing a WAD, the sidecar .txt does not gets imported. It's just added to the database but the file get's separated from the .wad when it should be available. This causes an issue when editing the WAD that causes the .txt panel to never have the necessary info for the user
+- [x] Auto-updater should be more visible. Right now, if the user get's prompted to update and it clicks "Yes", the only feedback the user has is a "Downloading Update" message at the bottom. It should display a full window with a progress bar displaying the update download's progress. Once that's done, it should restart.
+
 ## Planned / Nice-to-Haves (not yet implemented)
 
 - [x] **Auto-update** — `updater.py` checks `https://api.github.com/repos/exequiel-mleziva/wad-evoker/releases/latest` on boot (2 s delay, background `QThread`). If a newer tag exists, user is prompted to install; download replaces app files in-place and `os.execv` restarts. Settings dialog exposes a **Check for Updates** button with inline status feedback and an **Update Now** button.
@@ -220,6 +228,34 @@ The left metadata column had a redundant `MAPS` row (showing `—`) alongside a 
 - Removed `setFixedWidth(180)` from `MapListWidget` so it stretches to full panel width.
 - Moved `MapListWidget` out of the `meta_and_pic` `QHBoxLayout` and into the main `detail_layout` directly below the Description section.
 - Increased `MapListWidget` max height from 125 → 200 px.
+
+### Delete WAD — hard-delete option (fixed)
+
+When deleting a WAD entry, users could only remove it from the library database — the `.wad`/`.pk3` file remained on disk with no option to delete it. This caused orphaned files to accumulate in `~/.config/wad-evoker/wads/`.
+
+**Fix** (`ui/main_window.py` → `MainWindow._on_delete`):
+- Replaced simple Yes/No confirmation with a 3-option dialog:
+  - **Cancel** — abort the operation
+  - **Remove from Library** — delete DB entry only (original behavior)
+  - **Remove + Delete File** — delete DB entry and also delete the file from disk
+- **Safety guard**: Hard-delete is only allowed if the WAD's `filepath` is inside the app-managed library folder (`wad_importer.WAD_DIR`). Uses `os.path.commonpath()` to verify the file is a child of the managed directory.
+- If the user requests hard-delete but the file is outside the managed folder, a warning dialog is shown and the operation falls back to library-only removal.
+- Error handling: If `os.remove()` fails (permissions, file in use, etc.), a warning dialog is shown with the error message. The DB entry is still removed.
+- Status bar feedback differentiates between "WAD removed from library" and "WAD removed and file deleted."
+
+### Auto-updater progress feedback (fixed)
+
+When users accepted an update, the only feedback was a "Downloading Update" message in the status bar. There was no visual indication of download progress or installation status, making it unclear whether the update was working or stalled.
+
+**Fix** (`updater.py` + `ui/update_progress_dialog.py` + `ui/main_window.py`):
+- Created `UpdateProgressDialog` — a modal dialog with progress bar, status label, and download size display
+- Modified `UpdateDownloadWorker` to emit `progress(downloaded, total)` and `status_changed(message)` signals during download
+- Download now reads in chunks (8KB) and reports progress after each chunk
+- Progress bar shows percentage and MB downloaded/total
+- Status messages update through phases: "Downloading update...", "Extracting update...", "Installing update...", "Update complete! Restarting..."
+- Dialog uses indeterminate progress mode during extraction/installation phases
+- Styled to match the app's dark terminal aesthetic with blood-red progress bar gradient
+- On failure, dialog closes and error is shown via `QMessageBox`
 
 ---
 

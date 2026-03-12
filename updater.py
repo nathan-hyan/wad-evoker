@@ -242,6 +242,8 @@ class UpdateCheckWorker(QThread):
 class UpdateDownloadWorker(QThread):
     finished = pyqtSignal()
     failed = pyqtSignal(str)
+    progress = pyqtSignal(int, int)  # bytes_downloaded, total_bytes
+    status_changed = pyqtSignal(str)  # status message
 
     def __init__(self, zipball_url, appimage_url="", parent=None):
         super().__init__(parent)
@@ -251,9 +253,94 @@ class UpdateDownloadWorker(QThread):
     def run(self):
         try:
             if is_running_as_appimage() and self._appimage_url:
-                download_and_apply_appimage_update(self._appimage_url)
+                self._download_and_apply_appimage_update_with_progress(self._appimage_url)
             else:
-                download_and_apply_update(self._url)
+                self._download_and_apply_update_with_progress(self._url)
             self.finished.emit()
         except Exception as e:
             self.failed.emit(str(e))
+
+    def _download_and_apply_appimage_update_with_progress(self, appimage_url):
+        """Download AppImage with progress reporting."""
+        current_appimage = os.environ.get("APPIMAGE")
+        if not current_appimage:
+            raise RuntimeError("Not running as an AppImage — cannot apply AppImage update.")
+
+        self.status_changed.emit("Downloading update...")
+        req = Request(appimage_url, headers={"User-Agent": f"wad-evoker/{__version__}"})
+        with urlopen(req, timeout=120) as resp:
+            total_size = int(resp.headers.get('content-length', 0))
+            downloaded = 0
+            chunk_size = 8192
+            chunks = []
+            
+            while True:
+                chunk = resp.read(chunk_size)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                downloaded += len(chunk)
+                if total_size > 0:
+                    self.progress.emit(downloaded, total_size)
+            
+            new_data = b''.join(chunks)
+
+        self.status_changed.emit("Installing update...")
+        tmp_path = current_appimage + ".update"
+        with open(tmp_path, "wb") as f:
+            f.write(new_data)
+
+        os.chmod(tmp_path, 0o755)
+        os.replace(tmp_path, current_appimage)
+
+    def _download_and_apply_update_with_progress(self, zipball_url):
+        """Download and apply update with progress reporting."""
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+
+        self.status_changed.emit("Downloading update...")
+        req = Request(zipball_url, headers={"User-Agent": f"wad-evoker/{__version__}"})
+        with urlopen(req, timeout=60) as resp:
+            total_size = int(resp.headers.get('content-length', 0))
+            downloaded = 0
+            chunk_size = 8192
+            chunks = []
+            
+            while True:
+                chunk = resp.read(chunk_size)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                downloaded += len(chunk)
+                if total_size > 0:
+                    self.progress.emit(downloaded, total_size)
+            
+            zip_data = b''.join(chunks)
+
+        self.status_changed.emit("Extracting update...")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            zip_path = os.path.join(tmp_dir, "update.zip")
+            with open(zip_path, "wb") as f:
+                f.write(zip_data)
+
+            with zipfile.ZipFile(zip_path, "r") as z:
+                z.extractall(tmp_dir)
+
+            extracted = [
+                d for d in os.listdir(tmp_dir)
+                if os.path.isdir(os.path.join(tmp_dir, d)) and d != "__MACOSX"
+            ]
+            if not extracted:
+                raise RuntimeError("Could not find extracted update folder.")
+
+            src_dir = os.path.join(tmp_dir, extracted[0])
+
+            self.status_changed.emit("Installing update...")
+            for item in os.listdir(src_dir):
+                src = os.path.join(src_dir, item)
+                dst = os.path.join(app_dir, item)
+                if os.path.isdir(src):
+                    if os.path.exists(dst):
+                        shutil.rmtree(dst)
+                    shutil.copytree(src, dst)
+                else:
+                    shutil.copy2(src, dst)
