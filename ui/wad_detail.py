@@ -1,5 +1,6 @@
 import os
 
+import wad_importer
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTextEdit, QScrollArea, QFrame, QLineEdit, QSizePolicy
@@ -198,7 +199,12 @@ class WadDetailPanel(QWidget):
         detail_layout.setContentsMargins(0, 0, 0, 0)
         detail_layout.setSpacing(20)
 
-        # Title + launch row
+        # Title + DEH sub-container (tight internal spacing)
+        title_block = QWidget()
+        title_block_layout = QVBoxLayout(title_block)
+        title_block_layout.setContentsMargins(0, 0, 0, 0)
+        title_block_layout.setSpacing(6)
+
         title_row = QHBoxLayout()
         self.title_label = QLabel()
         self.title_label.setObjectName("wadTitle")
@@ -217,7 +223,19 @@ class WadDetailPanel(QWidget):
         self.btn_launch.setFixedSize(120, 40)
         self.btn_launch.clicked.connect(self._on_launch)
         title_row.addWidget(self.btn_launch)
-        detail_layout.addLayout(title_row)
+        title_block_layout.addLayout(title_row)
+
+        # DEH badge row (hidden when no DEH files present)
+        self.deh_row = QWidget()
+        self.deh_row.setObjectName("dehRow")
+        self._deh_row_layout = QHBoxLayout(self.deh_row)
+        self._deh_row_layout.setContentsMargins(0, 0, 0, 0)
+        self._deh_row_layout.setSpacing(6)
+        self._deh_row_layout.addStretch()
+        self.deh_row.hide()
+        title_block_layout.addWidget(self.deh_row)
+
+        detail_layout.addWidget(title_block)
 
         # Meta grid
         self.meta_widget = QWidget()
@@ -390,6 +408,18 @@ class WadDetailPanel(QWidget):
                 border-radius: 3px;
             }
 
+            #dehChip {
+                color: #999999;
+                background: #2a2a2a;
+                border: 1px solid #555555;
+                border-radius: 3px;
+                font-family: 'Courier New', monospace;
+                font-size: 10px;
+                font-weight: bold;
+                letter-spacing: 1px;
+                padding: 2px 8px;
+            }
+
             #mapListText {
                 background: #111;
                 border: 1px solid #2a2a2a;
@@ -452,6 +482,21 @@ class WadDetailPanel(QWidget):
         self.detail_widget.show()
 
         self.title_label.setText(wad["title"])
+
+        # Rebuild DEH badge row
+        while self._deh_row_layout.count() > 1:
+            item = self._deh_row_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        deh_files = wad_importer.find_deh_files(wad.get("filepath", ""))
+        if deh_files:
+            for _path in deh_files:
+                chip = QLabel("DEH")
+                chip.setObjectName("dehChip")
+                self._deh_row_layout.insertWidget(self._deh_row_layout.count() - 1, chip)
+            self.deh_row.show()
+        else:
+            self.deh_row.hide()
         self.lbl_filename._val_label.setText(wad.get("filename", "—"))
         self.lbl_author._val_label.setText(wad.get("author") or "—")
         self.lbl_year._val_label.setText(wad.get("year") or "—")

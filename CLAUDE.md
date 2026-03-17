@@ -26,8 +26,8 @@ wad-evoker/
 ├── db.py                    # All SQLite logic (CRUD for wads + tags)
 ├── titlepic.py              # TITLEPIC extraction: WAD (omgifol) + PK3 (zip strategies) → cached PNG
 ├── maplist.py               # Map list extraction: WAD/PK3 via omgifol, MAPINFO/ZMAPINFO/UMAPINFO parsing
-├── wad_importer.py          # File import: .wad, .pk3, .zip extraction + .txt metadata parser
-├── sourceport.py            # Source port config (read/write binary path) + subprocess launch
+├── wad_importer.py          # File import: .wad, .pk3, .zip extraction + .txt metadata parser + find_deh_files()
+├── sourceport.py            # Source port config (read/write binary path) + subprocess launch (with -deh support)
 ├── version.py               # Single source of truth for __version__ (e.g. "1.0.0")
 ├── updater.py               # Auto-update: GitHub release check, zip download, file replacement, restart
 ├── requirements.txt         # PyQt6, omgifol, Pillow
@@ -35,12 +35,31 @@ wad-evoker/
 └── ui/
     ├── __init__.py
     ├── main_window.py       # Main window: toolbar, drag-drop, search, splitter layout
-    ├── wad_list.py          # Left panel: QListWidget of WADs
-    ├── wad_detail.py        # Right panel: metadata display, tags, launch button
+    ├── wad_list.py          # Left panel: QListWidget of WADs (with WadItemDelegate for [DEH] badge)
+    ├── wad_detail.py        # Right panel: metadata display, tags, launch button, DEH badge row
     ├── wad_edit_dialog.py   # Modal WAD metadata editor + sidecar .txt preview
     ├── last_played.py       # Top "Recent" horizontal card strip
-    └── settings_dialog.py   # Source port binary picker dialog
+    ├── settings_dialog.py        # Source port binary picker dialog
+    ├── update_progress_dialog.py  # Modal progress bar shown during auto-update download/install
+    ├── files_launch_dialog.py     # Modal multi-file selection dialog shown before launch
+    └── styled_checkbox.py         # Shared StyledCheckBox widget (custom painted, blood-red indicator)
 ```
+
+---
+
+## Shared UI Components
+
+### `ui/styled_checkbox.py` — `StyledCheckBox`
+
+A reusable `QCheckBox` subclass with a fully custom `paintEvent` that matches the app's dark terminal aesthetic. **Use this wherever a checkbox is needed in the UI instead of a plain `QCheckBox`.**
+
+- **Unchecked**: dark `#1a1a1a` indicator box with `#3a3a3a` border
+- **Checked**: blood-red `#8b0000` indicator with `#cc2200` border + centered white dash mark
+- **Text**: always rendered in `#e8e0d0` using Courier New 11pt
+- Sets its own font via `__init__` so `sizeHint()` is accurate without overriding it
+- No QSS styles needed — all rendering is done in `paintEvent`
+
+**Current uses**: `FilesLaunchDialog` (file checkboxes + "Don't ask" option), `WadEditDialog` (skip prompt toggle)
 
 ---
 
@@ -61,19 +80,20 @@ All user data lives under `~/.config/wad-evoker/`:
 
 ```sql
 CREATE TABLE wads (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    title       TEXT NOT NULL,
-    filename    TEXT NOT NULL,
-    filepath    TEXT NOT NULL UNIQUE,
-    author      TEXT,
-    description TEXT,
-    year        TEXT,
-    game        TEXT,
-    map_count     TEXT,
-    map_list      TEXT,
-    titlepic_path TEXT,
-    added_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_played   TIMESTAMP
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    title             TEXT NOT NULL,
+    filename          TEXT NOT NULL,
+    filepath          TEXT NOT NULL UNIQUE,
+    author            TEXT,
+    description       TEXT,
+    year              TEXT,
+    game              TEXT,
+    map_count         TEXT,
+    map_list          TEXT,
+    titlepic_path     TEXT,
+    added_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_played       TIMESTAMP,
+    skip_files_prompt INTEGER DEFAULT 0  -- skip FilesLaunchDialog on next launch
 );
 
 CREATE TABLE tags (
@@ -111,10 +131,15 @@ CREATE TABLE tags (
 ### Launch flow
 
 1. User selects a WAD and clicks **▶ LAUNCH**
-2. `sourceport.launch_wad(filepath)` is called
-3. Runs: `subprocess.Popen([binary, "-file", wad_filepath])`
-4. On success: `db.update_last_played(wad_id)` is called, Recent bar refreshes
-5. On failure: `QMessageBox.warning` shown with the error
+2. `wad_importer.find_deh_files(filepath)` checks for `.deh` files in the entry subfolder
+3. If DEH files exist **and** `wad.skip_files_prompt` is falsy: `FilesLaunchDialog` is shown — a modal with one `StyledCheckBox` per file (all checked by default) plus a “Don’t ask again” option. User can deselect files or cancel entirely. If “Don’t ask again” is checked, `db.update_skip_files_prompt(wad_id, True)` is saved immediately.
+4. If `skip_files_prompt` is already set, all DEH files are used automatically without showing the dialog.
+5. `sourceport.launch_wad(filepath, deh_files=[...])` is called
+6. Runs: `subprocess.Popen([binary, "-file", wad_filepath, "-deh", deh1, "-deh", deh2, ...])`
+7. On success: `db.update_last_played(wad_id)` is called, Recent bar refreshes
+8. On failure: `QMessageBox.warning` shown with the error
+
+The `skip_files_prompt` flag can be reset per-entry via the **✎ EDIT** dialog (“Skip files selection dialog on launch” checkbox at the bottom of the form).
 
 ### Edit metadata flow
 
@@ -196,7 +221,7 @@ CREATE TABLE tags (
 
 ## Planned / Nice-to-Haves (not yet implemented)
 
-- [ ] **Multi-wad + DEH Support** - Some maps contain multiple wads and a DeHackEd file to improve experience. The subfolder structure is already in place: all WADs from a ZIP share one `wads/<name>/` subfolder alongside their `.deh` files. The next step is teaching the launch flow to pass all WADs (and the `.deh`) to the source port, and letting the user select which files to include.
+- [x] **DEH Support** - WADs with `.deh` sidecar files now show a `[DEH]` badge in the library list and in the detail panel (below the title). On launch, if DEH files are present a modal dialog appears with checkboxes listing each `.deh` file (all enabled by default) so the user can choose which patches to apply. The source port is invoked with `-deh <file>` for each selected file. Multi-wad support (multiple `.wad` files per entry) is still pending.
 - [x] **Auto-update** — `updater.py` checks `https://api.github.com/repos/exequiel-mleziva/wad-evoker/releases/latest` on boot (2 s delay, background `QThread`). If a newer tag exists, user is prompted to install; download replaces app files in-place and `os.execv` restarts. Settings dialog exposes a **Check for Updates** button with inline status feedback and an **Update Now** button.
 - [ ] **Multiple named source port profiles** — e.g. "UZDoom", "DSDA", "Crispy" selectable per-launch or as default
 - [ ] **Time played tracking** — store `play_duration_seconds` in `wads` table; hook into process monitoring via `subprocess` + `time`

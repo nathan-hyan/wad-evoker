@@ -21,6 +21,7 @@ from ui.wad_edit_dialog import WadEditDialog
 from ui.last_played import LastPlayedBar
 from ui.settings_dialog import SettingsDialog
 from ui.update_progress_dialog import UpdateProgressDialog
+from ui.files_launch_dialog import FilesLaunchDialog
 
 
 class MainWindow(QMainWindow):
@@ -323,7 +324,20 @@ class MainWindow(QMainWindow):
         self.wad_list.select_wad_by_id(wad_id)
 
     def _on_launch(self, wad_id, wad_filepath):
-        ok, err = sourceport.launch_wad(wad_filepath)
+        deh_files = wad_importer.find_deh_files(wad_filepath)
+        selected_deh = []
+        if deh_files:
+            wad = db.get_wad_by_id(wad_id)
+            if wad and wad.get("skip_files_prompt"):
+                selected_deh = deh_files
+            else:
+                dlg = FilesLaunchDialog(deh_files, self)
+                if dlg.exec() != dlg.DialogCode.Accepted:
+                    return
+                selected_deh = dlg.selected_files()
+                if dlg.dont_ask_again():
+                    db.update_skip_files_prompt(wad_id, True)
+        ok, err = sourceport.launch_wad(wad_filepath, deh_files=selected_deh or None)
         if ok:
             db.update_last_played(wad_id)
             self.last_played_bar.refresh()

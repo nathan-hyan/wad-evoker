@@ -41,8 +41,9 @@ def init_db():
     """)
     # Migration: add columns to existing installs
     for col, typedef in [
-        ("titlepic_path", "TEXT"),
-        ("map_list",      "TEXT"),
+        ("titlepic_path",       "TEXT"),
+        ("map_list",            "TEXT"),
+        ("skip_files_prompt",   "INTEGER DEFAULT 0"),
     ]:
         try:
             c.execute(f"ALTER TABLE wads ADD COLUMN {col} {typedef}")
@@ -155,6 +156,16 @@ def update_wad(wad_id, *, title=None, filename=None, filepath=None, author=None,
         conn.commit()
     finally:
         conn.close()
+
+
+def update_skip_files_prompt(wad_id, value):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE wads SET skip_files_prompt = ? WHERE id = ?",
+        (1 if value else 0, wad_id)
+    )
+    conn.commit()
+    conn.close()
 
 
 def delete_wad(wad_id):

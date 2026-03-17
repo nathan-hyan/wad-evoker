@@ -1,9 +1,34 @@
+import wad_importer
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QListWidget, QListWidgetItem,
-    QLabel, QAbstractItemView
+    QLabel, QAbstractItemView, QStyledItemDelegate
 )
-from PyQt6.QtCore import pyqtSignal, Qt
-from PyQt6.QtGui import QFont
+from PyQt6.QtCore import pyqtSignal, Qt, QRect
+from PyQt6.QtGui import QFont, QColor, QPen, QBrush
+
+
+class WadItemDelegate(QStyledItemDelegate):
+    _DEH_ROLE = Qt.ItemDataRole.UserRole + 1
+
+    def paint(self, painter, option, index):
+        super().paint(painter, option, index)
+        if not index.data(self._DEH_ROLE):
+            return
+        painter.save()
+        r = option.rect
+        tag_w, tag_h = 44, 16
+        tag_x = r.right() - tag_w - 8
+        tag_y = r.center().y() - tag_h // 2
+        tag_rect = QRect(tag_x, tag_y, tag_w, tag_h)
+        painter.setBrush(QBrush(QColor("#2a2a2a")))
+        painter.setPen(QPen(QColor("#555555"), 1))
+        painter.drawRoundedRect(tag_rect, 3, 3)
+        font = QFont("Courier New", 8)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(QColor("#aaaaaa"))
+        painter.drawText(tag_rect, Qt.AlignmentFlag.AlignCenter, "DEH")
+        painter.restore()
 
 
 class WadListWidget(QWidget):
@@ -31,6 +56,7 @@ class WadListWidget(QWidget):
         self.list_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.list_widget.currentItemChanged.connect(self._on_item_changed)
         self.list_widget.setSpacing(1)
+        self.list_widget.setItemDelegate(WadItemDelegate(self.list_widget))
         layout.addWidget(self.list_widget)
 
     def _apply_styles(self):
@@ -83,6 +109,7 @@ class WadListWidget(QWidget):
             item = QListWidgetItem()
             item.setText(wad["title"])
             item.setData(Qt.ItemDataRole.UserRole, wad)
+            item.setData(WadItemDelegate._DEH_ROLE, bool(wad_importer.find_deh_files(wad.get("filepath", ""))))
             item.setToolTip(wad.get("filename", ""))
             self.list_widget.addItem(item)
 

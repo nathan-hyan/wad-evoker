@@ -8,6 +8,7 @@ from PyQt6.QtCore import Qt
 
 import db
 import sqlite3
+from ui.styled_checkbox import StyledCheckBox
 
 
 class WadEditDialog(QDialog):
@@ -119,6 +120,14 @@ class WadEditDialog(QDialog):
         self.map_list_text.setAcceptRichText(False)
         self.map_list_text.setMinimumHeight(120)
         left_layout.addWidget(self.map_list_text, 1)
+
+        launch_div = QFrame()
+        launch_div.setFrameShape(QFrame.Shape.HLine)
+        launch_div.setObjectName("editDivider")
+        left_layout.addWidget(launch_div)
+
+        self.skip_prompt_check = StyledCheckBox("Skip files selection dialog on launch")
+        left_layout.addWidget(self.skip_prompt_check)
 
         left.setFixedWidth(self._left_fixed_width)
         left.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
@@ -305,6 +314,7 @@ class WadEditDialog(QDialog):
 
         self.desc_text.setPlainText(self._wad.get("description") or "")
         self.map_list_text.setPlainText(self._wad.get("map_list") or "")
+        self.skip_prompt_check.setChecked(bool(self._wad.get("skip_files_prompt")))
 
         txt_path = self._find_sidecar_txt(self._wad.get("filepath") or "", self._wad.get("filename") or "")
         self._load_sidecar_txt(txt_path)
@@ -479,6 +489,7 @@ class WadEditDialog(QDialog):
                 description=self.desc_text.toPlainText().strip() or "",
                 map_list=self.map_list_text.toPlainText().strip() or "",
             )
+            db.update_skip_files_prompt(self._wad_id, self.skip_prompt_check.isChecked())
         except sqlite3.IntegrityError:
             self.hint_label.setText("That file is already in your library.")
             self.hint_label.setStyleSheet("color: #cc2200;")

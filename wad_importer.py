@@ -220,3 +220,16 @@ def title_from_filename(filename):
     base = os.path.splitext(filename)[0]
     # turn underscores/dashes into spaces, title-case
     return re.sub(r"[_\-]+", " ", base).title()
+
+
+def find_deh_files(wad_filepath):
+    """Return a sorted list of .deh file paths found in the same directory as the WAD."""
+    entry_dir = os.path.dirname(wad_filepath)
+    try:
+        return sorted([
+            os.path.join(entry_dir, f)
+            for f in os.listdir(entry_dir)
+            if f.lower().endswith(".deh")
+        ])
+    except OSError:
+        return []
