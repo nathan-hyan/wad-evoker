@@ -51,7 +51,7 @@ All user data lives under `~/.config/wad-evoker/`:
 | Path         | Purpose                                                               |
 | ------------ | --------------------------------------------------------------------- |
 | `library.db` | SQLite database                                                       |
-| `wads/`      | Imported WAD/PK3 files (copied here on import)                        |
+| `wads/`      | Imported WAD/PK3 files — each entry in its own named subfolder        |
 | `titlepics/` | Cached TITLEPIC PNGs (md5-named, extracted on import or first select) |
 | `config.ini` | Source port binary path                                               |
 
@@ -93,10 +93,12 @@ CREATE TABLE tags (
 1. User clicks **＋ Add WAD** or drops a file onto the window
 2. `wad_importer.import_file(path)` is called
 3. If `.zip`: extracted to a temp dir, all `.wad`/`.pk3` files inside are found
-4. Each WAD is copied to `~/.config/wad-evoker/wads/` (deduplicated with `_1`, `_2` suffixes)
-5. A `.txt` sidecar file in the same directory is parsed for metadata
-6. `db.add_wad(...)` is called — silently skips if filepath already exists (UNIQUE constraint)
-7. Library list and Recent bar are refreshed
+4. A named subfolder `wads/<zip_basename>/` is created (deduplicated with `_1`, `_2` suffixes). All WADs from the same ZIP share one subfolder (they're one release)
+5. All `.txt` and `.deh` sidecar files from the ZIP are copied into the entry subfolder
+6. Each WAD is copied into the entry subfolder; its `.txt` sidecar (if found) is parsed for metadata
+   - For single `.wad`/`.pk3` imports: subfolder is `wads/<filename_basename>/`, only matching-name sidecars are copied
+7. `db.add_wad(...)` is called — silently skips if filepath already exists (UNIQUE constraint)
+8. Library list and Recent bar are refreshed
 
 ### .txt parser (`wad_importer.parse_txt`)
 
@@ -188,13 +190,13 @@ CREATE TABLE tags (
 ## Planned Known bugs to fix / UI/UX to be fixed
 
 - [x] When deleting a WAD entry, the user does not have the choice to hard-delete the .wad, so the .wad is still present in the disk even though there's no entry in the list
-- [ ] Currently, when importing a WAD, the sidecar .txt does not gets imported. It's just added to the database but the file get's separated from the .wad when it should be available. This causes an issue when editing the WAD that causes the .txt panel to never have the necessary info for the user
+- [x] Currently, when importing a WAD, the sidecar .txt does not gets imported. It's just added to the database but the file get's separated from the .wad when it should be available. This causes an issue when editing the WAD that causes the .txt panel to never have the necessary info for the user
 - [x] CRITICAL: Sometimes when a wad is drag-n-dropped, instead of displaying the correct metadata for the wad, it displays data from a random wad. Looks like cache'd data but i'm not sure where it's coming from. Right now it appears as Wasted 2: The Crusher with the description: The second in an occassional series of small but tough-ish levels. From the metadata, TITLEPIC is ok, Filename is ok but the rest of the metadata contains the seeminly cache data
 - [x] Auto-updater should be more visible. Right now, if the user get's prompted to update and it clicks "Yes", the only feedback the user has is a "Downloading Update" message at the bottom. It should display a full window with a progress bar displaying the update download's progress. Once that's done, it should restart.
 
 ## Planned / Nice-to-Haves (not yet implemented)
 
-- [ ] **Muti-wad + DEH Support** - Some maps contains multiple wads and a DeHackEd file to improve experience. The idea is for the app to know they're part of a single entry and load them together when launching the entry.
+- [ ] **Multi-wad + DEH Support** - Some maps contain multiple wads and a DeHackEd file to improve experience. The subfolder structure is already in place: all WADs from a ZIP share one `wads/<name>/` subfolder alongside their `.deh` files. The next step is teaching the launch flow to pass all WADs (and the `.deh`) to the source port, and letting the user select which files to include.
 - [x] **Auto-update** — `updater.py` checks `https://api.github.com/repos/exequiel-mleziva/wad-evoker/releases/latest` on boot (2 s delay, background `QThread`). If a newer tag exists, user is prompted to install; download replaces app files in-place and `os.execv` restarts. Settings dialog exposes a **Check for Updates** button with inline status feedback and an **Update Now** button.
 - [ ] **Multiple named source port profiles** — e.g. "UZDoom", "DSDA", "Crispy" selectable per-launch or as default
 - [ ] **Time played tracking** — store `play_duration_seconds` in `wads` table; hook into process monitoring via `subprocess` + `time`
@@ -215,10 +217,12 @@ CREATE TABLE tags (
 ZDoom-format MAPINFO files use `map MAP01 lookup "HUSTR_1"` to reference names from the `LANGUAGE` lump. The original quoted-name regex (`map (\w+) "([^"]+)"`) did not account for the `lookup` keyword, so those lines were never matched. The unquoted fallback then matched them and captured the literal word `lookup` as the display name — causing every map to appear as `"lookup"` in the UI.
 
 **Fix** (`maplist.py` → `_parse_mapinfo_text`):
+
 - Quoted regex updated to `map (\w+) (?:lookup )?"([^"]+)"` — now captures the quoted key regardless of whether `lookup` is present.
 - Unquoted fallback guards against `name.lower() == "lookup"` to prevent the word leaking through if somehow reached.
 
 **Library migration note**:
+
 - Older DB entries may have stored `map_list` lines where every map name was literally `lookup`. On WAD selection, `MainWindow._on_wad_selected` now refreshes the stored `map_list` if it is empty or contains the substring `lookup`.
 
 ### Detail panel — MAPS meta row & map list layout (fixed)
@@ -226,6 +230,7 @@ ZDoom-format MAPINFO files use `map MAP01 lookup "HUSTR_1"` to reference names f
 The left metadata column had a redundant `MAPS` row (showing `—`) alongside a 180 px-wide `MapListWidget` squeezed between the metadata and the TITLEPIC image. Map names with long titles were truncated and unreadable.
 
 **Fix** (`ui/wad_detail.py`):
+
 - Removed the `MAPS` meta row from `_build_ui` and its corresponding assignment in `show_wad`.
 - Removed `setFixedWidth(180)` from `MapListWidget` so it stretches to full panel width.
 - Moved `MapListWidget` out of the `meta_and_pic` `QHBoxLayout` and into the main `detail_layout` directly below the Description section.
@@ -236,6 +241,7 @@ The left metadata column had a redundant `MAPS` row (showing `—`) alongside a 
 When deleting a WAD entry, users could only remove it from the library database — the `.wad`/`.pk3` file remained on disk with no option to delete it. This caused orphaned files to accumulate in `~/.config/wad-evoker/wads/`.
 
 **Fix** (`ui/main_window.py` → `MainWindow._on_delete`):
+
 - Replaced simple Yes/No confirmation with a 3-option dialog:
   - **Cancel** — abort the operation
   - **Remove from Library** — delete DB entry only (original behavior)
@@ -250,6 +256,7 @@ When deleting a WAD entry, users could only remove it from the library database 
 When users accepted an update, the only feedback was a "Downloading Update" message in the status bar. There was no visual indication of download progress or installation status, making it unclear whether the update was working or stalled.
 
 **Fix** (`updater.py` + `ui/update_progress_dialog.py` + `ui/main_window.py`):
+
 - Created `UpdateProgressDialog` — a modal dialog with progress bar, status label, and download size display
 - Modified `UpdateDownloadWorker` to emit `progress(downloaded, total)` and `status_changed(message)` signals during download
 - Download now reads in chunks (8KB) and reports progress after each chunk
@@ -259,11 +266,27 @@ When users accepted an update, the only feedback was a "Downloading Update" mess
 - Styled to match the app's dark terminal aesthetic with blood-red progress bar gradient
 - On failure, dialog closes and error is shown via `QMessageBox`
 
+### Sidecar .txt not imported alongside WAD (fixed)
+
+When importing a `.zip` (or a single `.wad`/`.pk3`), the `.txt` sidecar file was parsed for metadata but never copied to the managed library folder. The temp extraction dir was deleted after import, leaving the WAD in `wads/` with no `.txt` next to it. Opening the Edit dialog and clicking **Show .txt** always showed "No sidecar .txt selected/found."
+
+**Fix** (`wad_importer.py`):
+
+- Every import now creates a named subfolder under `WAD_DIR`: `wads/<zip_basename>/` for ZIP imports, `wads/<wad_basename>/` for single file imports.
+- For ZIP imports: all `.txt` and `.deh` files from the entire extracted tree are copied into the entry subfolder before the temp dir is deleted. All WADs from the same ZIP share one subfolder (they're one release).
+- For single WAD imports: `.txt` and `.deh` files whose name matches the WAD basename are copied from the source directory into the entry subfolder.
+- `_unique_dest` (flat WAD_DIR placement) is replaced by `_make_entry_subdir` + `_unique_dest_in_dir`.
+- `WadEditDialog._find_sidecar_txt` already looks in `os.path.dirname(wad_filepath)` — with the subfolder layout it now finds the `.txt` correctly.
+- Hard-delete (`_on_delete`) was updated to also `os.rmdir` the entry subfolder when it becomes empty after the WAD file is removed.
+
+---
+
 ### Stale metadata on drag-and-drop import (fixed)
 
 When a WAD was drag-and-dropped and imported, the detail panel would sometimes display metadata from a previously selected WAD instead of the newly imported one. The TITLEPIC and filename were correct, but title, author, description, and other fields showed cached data from another WAD in the library.
 
 **Root causes**:
+
 1. **Incorrect .txt sidecar fallback** (`wad_importer.py` → `_find_and_parse_txt`):
    - When no matching `.txt` file was found for a WAD, the function had a fallback that grabbed **any** `.txt` file in the same directory
    - This caused WADs without sidecars to inherit metadata from unrelated `.txt` files (e.g., other WADs' sidecars in the same import folder)
@@ -277,11 +300,13 @@ When a WAD was drag-and-dropped and imported, the detail panel would sometimes d
    - The newly imported WAD's ID was never explicitly selected, so the wrong WAD's data persisted in the detail panel
 
 **Fix** (`wad_importer.py` → `_find_and_parse_txt`):
+
 - Removed the fallback loop that grabbed any `.txt` file in the directory
 - Now only parses `.txt` files that match the WAD filename (e.g., `mymap.txt` for `mymap.wad`)
 - WADs without matching sidecars import with minimal metadata (filename-derived title only), allowing users to fill in details manually
 
 **Fix** (`ui/main_window.py` → `_import_path` and `_on_wad_selected`):
+
 - Track `last_imported_id` during the import loop to identify the most recently imported WAD
 - Call `detail_panel.clear()` before `refresh_library()` to prevent stale data from being displayed during the refresh
 - After refresh, explicitly select the newly imported WAD by calling `wad_list.select_wad_by_id(last_imported_id)`

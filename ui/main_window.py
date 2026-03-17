@@ -387,6 +387,12 @@ class MainWindow(QMainWindow):
             try:
                 if os.path.exists(wad_path) and os.path.isfile(wad_path):
                     os.remove(wad_path)
+                    entry_dir = os.path.dirname(wad_path)
+                    entry_dir_real = os.path.realpath(os.path.abspath(entry_dir))
+                    managed_dir = os.path.realpath(os.path.abspath(wad_importer.WAD_DIR))
+                    parent_of_entry = os.path.realpath(os.path.abspath(os.path.dirname(entry_dir)))
+                    if parent_of_entry == managed_dir and not os.listdir(entry_dir):
+                        os.rmdir(entry_dir)
             except OSError as e:
                 QMessageBox.warning(
                     self,
