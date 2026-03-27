@@ -22,11 +22,12 @@
 
 ## Planned / Nice-to-Haves
 
-- [ ] **Multiple named source port profiles** — e.g. "UZDoom", "DSDA", "Crispy" selectable per-launch or as default
+- [x] **Multiple named source port profiles** — `sourceport.py` supports multiple profiles stored as `[sourceport_N]` sections in `config.ini` with full CRUD. The active profile persists across sessions via `[sourceport] active`. Legacy single-binary configs are auto-migrated on first load. Settings dialog provides a profile list with add/edit/delete. A `QComboBox` in the status bar (bottom-right) shows the active profile and allows switching. Launch uses the active profile's binary.
 - [ ] **Time played tracking** — store `play_duration_seconds` in `wads` table; hook into process monitoring via `subprocess` + `time`
 - [ ] **Screenshot support** — store screenshot paths, display in detail panel
 - [ ] **Stats** — similar to DoomLauncher (https://github.com/nstlaurent/DoomLauncher): kills, deaths, secrets per session
 - [ ] **IWAD selection** — let user specify the base IWAD (`doom2.wad`, `doom.wad`, etc.) passed via `-iwad`
+- [ ] **Per-WAD source port binding** — allow assigning a specific source port profile to a WAD, overriding the global active profile on launch
 - [ ] **Extra args per WAD** — store and pass custom launch args (e.g. `-skill 4 -warp 1`)
 - [ ] **Sort / filter** — sort library by title, date added, last played; filter by tag
 - [ ] **Packaging** — `pyproject.toml`, `.desktop` file for Linux app launcher integration, optional PyInstaller bundle

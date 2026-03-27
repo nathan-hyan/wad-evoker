@@ -225,15 +225,15 @@ class WadDetailPanel(QWidget):
         title_row.addWidget(self.btn_launch)
         title_block_layout.addLayout(title_row)
 
-        # DEH badge row (hidden when no DEH files present)
-        self.deh_row = QWidget()
-        self.deh_row.setObjectName("dehRow")
-        self._deh_row_layout = QHBoxLayout(self.deh_row)
-        self._deh_row_layout.setContentsMargins(0, 0, 0, 0)
-        self._deh_row_layout.setSpacing(6)
-        self._deh_row_layout.addStretch()
-        self.deh_row.hide()
-        title_block_layout.addWidget(self.deh_row)
+        # Badge row (DEH / +WAD chips; hidden when none apply)
+        self.badge_row = QWidget()
+        self.badge_row.setObjectName("dehRow")
+        self._badge_row_layout = QHBoxLayout(self.badge_row)
+        self._badge_row_layout.setContentsMargins(0, 0, 0, 0)
+        self._badge_row_layout.setSpacing(6)
+        self._badge_row_layout.addStretch()
+        self.badge_row.hide()
+        title_block_layout.addWidget(self.badge_row)
 
         detail_layout.addWidget(title_block)
 
@@ -420,6 +420,18 @@ class WadDetailPanel(QWidget):
                 padding: 2px 8px;
             }
 
+            #multiWadChip {
+                color: #6aaaee;
+                background: #1a2a3a;
+                border: 1px solid #3a6a9a;
+                border-radius: 3px;
+                font-family: 'Courier New', monospace;
+                font-size: 10px;
+                font-weight: bold;
+                letter-spacing: 1px;
+                padding: 2px 8px;
+            }
+
             #mapListText {
                 background: #111;
                 border: 1px solid #2a2a2a;
@@ -483,20 +495,25 @@ class WadDetailPanel(QWidget):
 
         self.title_label.setText(wad["title"])
 
-        # Rebuild DEH badge row
-        while self._deh_row_layout.count() > 1:
-            item = self._deh_row_layout.takeAt(0)
+        # Rebuild badge row (DEH + multi-WAD chips)
+        while self._badge_row_layout.count() > 1:
+            item = self._badge_row_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
         deh_files = wad_importer.find_deh_files(wad.get("filepath", ""))
-        if deh_files:
-            for _path in deh_files:
-                chip = QLabel("DEH")
-                chip.setObjectName("dehChip")
-                self._deh_row_layout.insertWidget(self._deh_row_layout.count() - 1, chip)
-            self.deh_row.show()
+        has_multi = bool(wad.get("extra_wads"))
+        for _path in deh_files:
+            chip = QLabel("DEH")
+            chip.setObjectName("dehChip")
+            self._badge_row_layout.insertWidget(self._badge_row_layout.count() - 1, chip)
+        if has_multi:
+            chip = QLabel("+WAD")
+            chip.setObjectName("multiWadChip")
+            self._badge_row_layout.insertWidget(self._badge_row_layout.count() - 1, chip)
+        if deh_files or has_multi:
+            self.badge_row.show()
         else:
-            self.deh_row.hide()
+            self.badge_row.hide()
         self.lbl_filename._val_label.setText(wad.get("filename", "—"))
         self.lbl_author._val_label.setText(wad.get("author") or "—")
         self.lbl_year._val_label.setText(wad.get("year") or "—")

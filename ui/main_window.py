@@ -2,7 +2,7 @@ import os
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QLabel, QPushButton, QLineEdit, QFileDialog,
-    QMessageBox, QSplitter, QFrame, QStatusBar
+    QMessageBox, QSplitter, QFrame, QStatusBar, QComboBox
 )
 from PyQt6.QtCore import Qt, QMimeData, QTimer
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QFont, QIcon
@@ -84,6 +84,17 @@ class MainWindow(QMainWindow):
         self.status = QStatusBar()
         self.status.setObjectName("statusBar")
         self.setStatusBar(self.status)
+
+        # Source port dropdown in status bar (right side)
+        sp_label = QLabel("Source Port:")
+        sp_label.setObjectName("spLabel")
+        self.sp_combo = QComboBox()
+        self.sp_combo.setObjectName("spCombo")
+        self.sp_combo.setMinimumWidth(160)
+        self.sp_combo.currentIndexChanged.connect(self._on_source_port_changed)
+        self.status.addPermanentWidget(sp_label)
+        self.status.addPermanentWidget(self.sp_combo)
+        self.refresh_source_port_dropdown()
 
     def _build_topbar(self):
         bar = QWidget()
@@ -201,6 +212,38 @@ class MainWindow(QMainWindow):
                 font-size: 11px;
                 border-top: 1px solid #2a2a2a;
                 font-family: 'Courier New', monospace;
+            }
+
+            #spLabel {
+                color: #666;
+                font-size: 11px;
+                font-family: 'Courier New', monospace;
+                padding-right: 4px;
+            }
+
+            #spCombo {
+                background: #1a1a1a;
+                color: #e8e0d0;
+                border: 1px solid #3a3a3a;
+                border-radius: 3px;
+                padding: 2px 8px;
+                font-family: 'Courier New', monospace;
+                font-size: 11px;
+                min-height: 20px;
+            }
+            #spCombo:hover { border-color: #cc2200; }
+            #spCombo::drop-down {
+                border: none;
+                width: 18px;
+            }
+            #spCombo QAbstractItemView {
+                background: #1a1a1a;
+                color: #e8e0d0;
+                border: 1px solid #3a3a3a;
+                selection-background-color: #2a1a1a;
+                selection-color: #ff6644;
+                font-family: 'Courier New', monospace;
+                font-size: 11px;
             }
 
             QScrollBar:vertical {
@@ -467,6 +510,29 @@ class MainWindow(QMainWindow):
     def _on_settings(self):
         dlg = SettingsDialog(self)
         dlg.exec()
+        self.refresh_source_port_dropdown()
+
+    def refresh_source_port_dropdown(self):
+        """Reload source port profiles into the status bar combo box."""
+        self.sp_combo.blockSignals(True)
+        self.sp_combo.clear()
+        profiles = sourceport.get_profiles()
+        active_id = sourceport.get_active_profile_id()
+        select_idx = 0
+        for i, p in enumerate(profiles):
+            self.sp_combo.addItem(p["name"], p["id"])
+            if p["id"] == active_id:
+                select_idx = i
+        if profiles:
+            self.sp_combo.setCurrentIndex(select_idx)
+        self.sp_combo.blockSignals(False)
+
+    def _on_source_port_changed(self, index):
+        if index < 0:
+            return
+        pid = self.sp_combo.currentData()
+        if pid is not None:
+            sourceport.set_active_profile(pid)
 
     def _start_update_check(self):
         self._update_worker = UpdateCheckWorker()

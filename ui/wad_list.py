@@ -9,25 +9,38 @@ from PyQt6.QtGui import QFont, QColor, QPen, QBrush
 
 class WadItemDelegate(QStyledItemDelegate):
     _DEH_ROLE = Qt.ItemDataRole.UserRole + 1
+    _MULTI_WAD_ROLE = Qt.ItemDataRole.UserRole + 2
 
     def paint(self, painter, option, index):
         super().paint(painter, option, index)
-        if not index.data(self._DEH_ROLE):
+        has_deh = index.data(self._DEH_ROLE)
+        has_multi = index.data(self._MULTI_WAD_ROLE)
+        if not has_deh and not has_multi:
             return
         painter.save()
         r = option.rect
         tag_w, tag_h = 44, 16
-        tag_x = r.right() - tag_w - 8
-        tag_y = r.center().y() - tag_h // 2
-        tag_rect = QRect(tag_x, tag_y, tag_w, tag_h)
-        painter.setBrush(QBrush(QColor("#2a2a2a")))
-        painter.setPen(QPen(QColor("#555555"), 1))
-        painter.drawRoundedRect(tag_rect, 3, 3)
-        font = QFont("Courier New", 8)
-        font.setBold(True)
-        painter.setFont(font)
-        painter.setPen(QColor("#aaaaaa"))
-        painter.drawText(tag_rect, Qt.AlignmentFlag.AlignCenter, "DEH")
+        tag_spacing = 4
+        # Calculate chips to draw (right-aligned)
+        chips = []
+        if has_deh:
+            chips.append(("DEH", QColor("#2a2a2a"), QColor("#555555"), QColor("#aaaaaa")))
+        if has_multi:
+            chips.append(("+WAD", QColor("#1a2a3a"), QColor("#3a6a9a"), QColor("#6aaaee")))
+        cursor_x = r.right() - 8
+        for label, bg, border, fg in reversed(chips):
+            tag_x = cursor_x - tag_w
+            tag_y = r.center().y() - tag_h // 2
+            tag_rect = QRect(tag_x, tag_y, tag_w, tag_h)
+            painter.setBrush(QBrush(bg))
+            painter.setPen(QPen(border, 1))
+            painter.drawRoundedRect(tag_rect, 3, 3)
+            font = QFont("Courier New", 8)
+            font.setBold(True)
+            painter.setFont(font)
+            painter.setPen(fg)
+            painter.drawText(tag_rect, Qt.AlignmentFlag.AlignCenter, label)
+            cursor_x = tag_x - tag_spacing
         painter.restore()
 
 
@@ -110,6 +123,7 @@ class WadListWidget(QWidget):
             item.setText(wad["title"])
             item.setData(Qt.ItemDataRole.UserRole, wad)
             item.setData(WadItemDelegate._DEH_ROLE, bool(wad_importer.find_deh_files(wad.get("filepath", ""))))
+            item.setData(WadItemDelegate._MULTI_WAD_ROLE, bool(wad.get("extra_wads")))
             item.setToolTip(wad.get("filename", ""))
             self.list_widget.addItem(item)
 
