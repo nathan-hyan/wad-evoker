@@ -44,6 +44,7 @@ def init_db():
         ("titlepic_path",       "TEXT"),
         ("map_list",            "TEXT"),
         ("skip_files_prompt",   "INTEGER DEFAULT 0"),
+        ("extra_wads",          "TEXT"),
     ]:
         try:
             c.execute(f"ALTER TABLE wads ADD COLUMN {col} {typedef}")
@@ -57,13 +58,14 @@ def init_db():
 # ── WAD CRUD ──────────────────────────────────────────────────────────────────
 
 def add_wad(title, filename, filepath, author=None, description=None,
-            year=None, game=None, map_count=None, map_list=None, titlepic_path=None):
+            year=None, game=None, map_count=None, map_list=None, titlepic_path=None,
+            extra_wads=None):
     conn = get_connection()
     try:
         conn.execute(
-            """INSERT INTO wads (title, filename, filepath, author, description, year, game, map_count, map_list, titlepic_path)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (title, filename, filepath, author, description, year, game, map_count, map_list, titlepic_path)
+            """INSERT INTO wads (title, filename, filepath, author, description, year, game, map_count, map_list, titlepic_path, extra_wads)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (title, filename, filepath, author, description, year, game, map_count, map_list, titlepic_path, extra_wads)
         )
         conn.commit()
         row = conn.execute("SELECT * FROM wads WHERE filepath = ?", (filepath,)).fetchone()
@@ -156,6 +158,25 @@ def update_wad(wad_id, *, title=None, filename=None, filepath=None, author=None,
         conn.commit()
     finally:
         conn.close()
+
+
+def get_extra_wads(wad_id):
+    """Return list of extra WAD/PK3 paths stored for this entry, or []."""
+    conn = get_connection()
+    row = conn.execute("SELECT extra_wads FROM wads WHERE id = ?", (wad_id,)).fetchone()
+    conn.close()
+    if row and row["extra_wads"]:
+        return [p for p in row["extra_wads"].split("\n") if p.strip()]
+    return []
+
+
+def update_extra_wads(wad_id, paths):
+    """Store a list of extra WAD/PK3 paths for this entry."""
+    value = "\n".join(paths) if paths else None
+    conn = get_connection()
+    conn.execute("UPDATE wads SET extra_wads = ? WHERE id = ?", (value, wad_id))
+    conn.commit()
+    conn.close()
 
 
 def update_skip_files_prompt(wad_id, value):

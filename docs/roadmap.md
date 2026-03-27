@@ -30,4 +30,4 @@
 - [ ] **Extra args per WAD** — store and pass custom launch args (e.g. `-skill 4 -warp 1`)
 - [ ] **Sort / filter** — sort library by title, date added, last played; filter by tag
 - [ ] **Packaging** — `pyproject.toml`, `.desktop` file for Linux app launcher integration, optional PyInstaller bundle
-- [ ] **Multi-WAD support** — multiple `.wad` files per entry launched together
+- [x] **Multi-WAD support** — ZIP imports with multiple WADs produce a single library entry. The WAD matching the zip name is auto-selected as primary; when none matches a side-by-side picker dialog (WAD list + .txt readme) lets the user choose. Secondary WADs are stored in the `extra_wads` DB column. On launch, extra WADs appear in the same `FilesLaunchDialog` checklist as DEH files and are appended to the `-file` argument.

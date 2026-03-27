@@ -22,6 +22,7 @@ from ui.last_played import LastPlayedBar
 from ui.settings_dialog import SettingsDialog
 from ui.update_progress_dialog import UpdateProgressDialog
 from ui.files_launch_dialog import FilesLaunchDialog
+from ui.primary_wad_picker_dialog import PrimaryWadPickerDialog
 
 
 class MainWindow(QMainWindow):
@@ -233,6 +234,10 @@ class MainWindow(QMainWindow):
         imported = 0
         last_imported_id = None
         for r in results:
+            if r.get("needs_primary_selection"):
+                r = self._pick_primary_wad(r)
+                if r is None:
+                    continue
             meta = r["metadata"]
             title = meta.get("title") or wad_importer.title_from_filename(r["filename"])
             wad = db.add_wad(
@@ -246,6 +251,7 @@ class MainWindow(QMainWindow):
                 map_count=meta.get("map_count"),
                 map_list=r.get("map_list"),
                 titlepic_path=r.get("titlepic_path"),
+                extra_wads=r.get("extra_wads"),
             )
             if wad:
                 imported += 1
@@ -258,6 +264,23 @@ class MainWindow(QMainWindow):
                 self.wad_list.select_wad_by_id(last_imported_id)
         else:
             self.status.showMessage("No new WADs imported (already in library or unsupported).", 4000)
+
+    def _pick_primary_wad(self, selection_data):
+        """Show PrimaryWadPickerDialog and return a finalised result dict, or None on cancel."""
+        dlg = PrimaryWadPickerDialog(
+            zip_base=selection_data["zip_base"],
+            candidates=selection_data["candidates"],
+            entry_dir=selection_data["entry_dir"],
+            parent=self,
+        )
+        if dlg.exec() != dlg.DialogCode.Accepted:
+            return None
+        primary = dlg.selected_primary()
+        return wad_importer.finalize_zip_primary(
+            entry_dir=selection_data["entry_dir"],
+            primary_path=primary,
+            all_dest_paths=selection_data["candidates"],
+        )
 
     def _on_search(self, text):
         if text.strip():
@@ -324,20 +347,31 @@ class MainWindow(QMainWindow):
         self.wad_list.select_wad_by_id(wad_id)
 
     def _on_launch(self, wad_id, wad_filepath):
+        extra_wads = db.get_extra_wads(wad_id)
         deh_files = wad_importer.find_deh_files(wad_filepath)
-        selected_deh = []
-        if deh_files:
+        all_extra = extra_wads + deh_files
+
+        selected_extra = []
+        if all_extra:
             wad = db.get_wad_by_id(wad_id)
             if wad and wad.get("skip_files_prompt"):
-                selected_deh = deh_files
+                selected_extra = all_extra
             else:
-                dlg = FilesLaunchDialog(deh_files, self)
+                dlg = FilesLaunchDialog(all_extra, self)
                 if dlg.exec() != dlg.DialogCode.Accepted:
                     return
-                selected_deh = dlg.selected_files()
+                selected_extra = dlg.selected_files()
                 if dlg.dont_ask_again():
                     db.update_skip_files_prompt(wad_id, True)
-        ok, err = sourceport.launch_wad(wad_filepath, deh_files=selected_deh or None)
+
+        selected_wads = [f for f in selected_extra if os.path.splitext(f)[1].lower() in (".wad", ".pk3")]
+        selected_deh = [f for f in selected_extra if f.lower().endswith(".deh")]
+
+        ok, err = sourceport.launch_wad(
+            wad_filepath,
+            extra_wad_files=selected_wads or None,
+            deh_files=selected_deh or None,
+        )
         if ok:
             db.update_last_played(wad_id)
             self.last_played_bar.refresh()

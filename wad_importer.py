@@ -54,7 +54,6 @@ def _import_single(source_path):
 
 
 def _import_zip(zip_path):
-    results = []
     zip_base = os.path.splitext(os.path.basename(zip_path))[0]
     extract_dir = os.path.join(WAD_DIR, "_extract_tmp")
     os.makedirs(extract_dir, exist_ok=True)
@@ -62,46 +61,89 @@ def _import_zip(zip_path):
     with zipfile.ZipFile(zip_path, "r") as z:
         z.extractall(extract_dir)
 
-    # Collect WAD/PK3 files from the extraction
+    # Collect WAD/PK3 files from the extraction (skip macOS resource-fork artifacts)
     wad_files = []
     for root, _, files in os.walk(extract_dir):
+        if "__MACOSX" in root.split(os.sep):
+            continue
         for f in files:
+            if f.startswith("._"):
+                continue
             if os.path.splitext(f)[1].lower() in (".wad", ".pk3"):
                 wad_files.append((root, f))
 
     if not wad_files:
         shutil.rmtree(extract_dir, ignore_errors=True)
-        return results
+        return []
 
     # One subfolder for all WADs from this zip (they belong to the same release)
     entry_dir = _make_entry_subdir(zip_base)
 
-    # Copy every sidecar file (.txt, .deh) from the entire extracted tree
+    # Copy every sidecar file (.txt, .deh) from the entire extracted tree (skip macOS artifacts)
     for root, _, files in os.walk(extract_dir):
+        if "__MACOSX" in root.split(os.sep):
+            continue
         for f in files:
+            if f.startswith("._"):
+                continue
             if os.path.splitext(f)[1].lower() in SIDECAR_EXTENSIONS:
                 src = os.path.join(root, f)
                 dst = os.path.join(entry_dir, f)
                 if not os.path.exists(dst):
                     shutil.copy2(src, dst)
 
-    # Copy each WAD into the entry subfolder and build results
+    # Copy each WAD into the entry subfolder
+    dest_paths = []
     for root, f in wad_files:
         src = os.path.join(root, f)
         dest = _unique_dest_in_dir(f, entry_dir)
         shutil.copy2(src, dest)
-        txt_meta = _find_and_parse_txt(entry_dir, os.path.basename(dest))
-        maps = maplist.extract_maps(dest)
-        results.append({
-            "filepath": dest,
-            "filename": os.path.basename(dest),
-            "metadata": txt_meta,
-            "titlepic_path": titlepic.extract_titlepic(dest),
-            "map_list": maplist.format_map_list(maps),
-        })
+        dest_paths.append(dest)
 
     shutil.rmtree(extract_dir, ignore_errors=True)
-    return results
+
+    # Auto-detect primary: WAD whose base name matches the zip name
+    primary = None
+    for p in dest_paths:
+        if os.path.splitext(os.path.basename(p))[0].lower() == zip_base.lower():
+            primary = p
+            break
+
+    # Single-WAD zip — trivially the primary
+    if primary is None and len(dest_paths) == 1:
+        primary = dest_paths[0]
+
+    if primary is None:
+        # Multiple WADs, none matching zip name — caller must ask the user
+        return [{
+            "needs_primary_selection": True,
+            "entry_dir": entry_dir,
+            "zip_base": zip_base,
+            "candidates": dest_paths,
+        }]
+
+    return [_build_zip_result(entry_dir, primary, dest_paths)]
+
+
+def _build_zip_result(entry_dir, primary_path, all_dest_paths):
+    """Build the import result dict for a ZIP entry given the chosen primary WAD."""
+    secondary = [p for p in all_dest_paths if p != primary_path]
+    txt_meta = _find_and_parse_txt(entry_dir, os.path.basename(primary_path))
+    maps = maplist.extract_maps(primary_path)
+    extra_wads_str = "\n".join(secondary) if secondary else None
+    return {
+        "filepath": primary_path,
+        "filename": os.path.basename(primary_path),
+        "metadata": txt_meta,
+        "titlepic_path": titlepic.extract_titlepic(primary_path),
+        "map_list": maplist.format_map_list(maps),
+        "extra_wads": extra_wads_str,
+    }
+
+
+def finalize_zip_primary(entry_dir, primary_path, all_dest_paths):
+    """Called after the user picks the primary WAD from a multi-WAD zip."""
+    return _build_zip_result(entry_dir, primary_path, all_dest_paths)
 
 
 def _make_entry_subdir(name):

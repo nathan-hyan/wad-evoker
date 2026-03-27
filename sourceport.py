@@ -32,7 +32,7 @@ def set_source_port(binary_path):
     _save_config(cfg)
 
 
-def launch_wad(wad_filepath, extra_args=None, deh_files=None):
+def launch_wad(wad_filepath, extra_args=None, deh_files=None, extra_wad_files=None):
     """
     Launch a WAD with the configured source port.
     Returns (success: bool, error_message: str)
@@ -46,6 +46,8 @@ def launch_wad(wad_filepath, extra_args=None, deh_files=None):
         return False, f"Source port binary is not executable:\n{binary}"
 
     cmd = [binary, "-file", wad_filepath]
+    if extra_wad_files:
+        cmd.extend(extra_wad_files)
     if deh_files:
         for deh in deh_files:
             cmd.extend(["-deh", deh])
