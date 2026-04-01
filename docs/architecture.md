@@ -31,6 +31,7 @@ CREATE TABLE wads (
     added_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_played       TIMESTAMP,
     skip_files_prompt INTEGER DEFAULT 0, -- skip FilesLaunchDialog on next launch
+    extra_wads        TEXT,               -- newline-separated extra WAD/PK3 paths
     finished          INTEGER DEFAULT 0   -- 1 = user marked WAD as finished
 );
 

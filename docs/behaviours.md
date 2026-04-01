@@ -52,10 +52,12 @@ The `skip_files_prompt` flag can be reset per-entry via the **✎ EDIT** dialog 
 
 ## Source port config
 
-- Stored in `~/.config/wad-evoker/config.ini` under `[sourceport] binary = /path/to/binary`
-- Changeable at runtime via **⚙ Settings** — no restart needed
-- Settings dialog validates path live: checks `os.path.isfile` + `os.access(X_OK)`
-- Currently single binary — designed for easy extension to named profiles
+- Multiple named profiles stored in `~/.config/wad-evoker/config.ini` as `[sourceport_N]` sections (name + binary)
+- Active profile persisted via `[sourceport] active`; legacy single-binary configs auto-migrated on first load
+- Manageable via **⚙ Settings → Source Ports** (add/edit/delete) — no restart needed
+- A `QComboBox` in the status bar (bottom-right) shows the active profile and allows switching
+- Settings dialog validates binary path live: checks `os.path.isfile` + `os.access(X_OK)`
+- Launch always uses the active profile's binary
 
 ---
 
@@ -77,7 +79,7 @@ The `skip_files_prompt` flag can be reset per-entry via the **✎ EDIT** dialog 
 ## Finished WADs
 
 - Any WAD can be marked as finished via right-click → **Mark as Finished** in the library list
-- A `[DONE]` chip badge (green) appears next to the title in the WAD list
+- A `[DONE]` chip badge (green) appears next to the title in the WAD list (can be disabled via `show_finished_badge` setting)
 - Toggling back is done via right-click → **Mark as Unfinished**
 - `db.set_finished(wad_id, bool)` stores the state as `finished INTEGER DEFAULT 0` in the `wads` table
 - Library list sorting is controlled by the `finished_sort_mode` setting in `config.ini [library]`:

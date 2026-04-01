@@ -30,4 +30,4 @@ A reusable `QCheckBox` subclass with a fully custom `paintEvent` that matches th
 - Sets its own font via `__init__` so `sizeHint()` is accurate without overriding it
 - No QSS styles needed — all rendering is done in `paintEvent`
 
-**Current uses**: `FilesLaunchDialog` (file checkboxes + "Don't ask" option), `WadEditDialog` (skip prompt toggle)
+**Current uses**: `FilesLaunchDialog` (file checkboxes + "Don't ask" option), `WadEditDialog` (skip prompt toggle), `SettingsDialog` (library settings checkboxes)
