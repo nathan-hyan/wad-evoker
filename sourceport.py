@@ -164,6 +164,52 @@ def set_source_port(binary_path):
         set_active_profile(new_id)
 
 
+# ── Library settings ──────────────────────────────────────────────────────────
+
+# finished_sort_mode: "separator" | "bottom" | "none"
+#   separator = move finished WADs below a "FINISHED" separator (default)
+#   bottom    = move finished WADs to end, no separator
+#   none      = keep alphabetical order, no reordering
+
+def get_finished_sort_mode():
+    cfg = _get_config()
+    return cfg.get("library", "finished_sort_mode", fallback="separator")
+
+
+def set_finished_sort_mode(mode):
+    cfg = _get_config()
+    if "library" not in cfg:
+        cfg["library"] = {}
+    cfg["library"]["finished_sort_mode"] = mode
+    _save_config(cfg)
+
+
+def get_hide_finished_from_recent():
+    cfg = _get_config()
+    return cfg.getboolean("library", "hide_finished_from_recent", fallback=True)
+
+
+def set_hide_finished_from_recent(value):
+    cfg = _get_config()
+    if "library" not in cfg:
+        cfg["library"] = {}
+    cfg["library"]["hide_finished_from_recent"] = str(value).lower()
+    _save_config(cfg)
+
+
+def get_show_finished_badge():
+    cfg = _get_config()
+    return cfg.getboolean("library", "show_finished_badge", fallback=True)
+
+
+def set_show_finished_badge(value):
+    cfg = _get_config()
+    if "library" not in cfg:
+        cfg["library"] = {}
+    cfg["library"]["show_finished_badge"] = str(value).lower()
+    _save_config(cfg)
+
+
 # ── Launch ────────────────────────────────────────────────────────────────────
 
 def launch_wad(wad_filepath, extra_args=None, deh_files=None, extra_wad_files=None,

@@ -71,3 +71,31 @@ The `skip_files_prompt` flag can be reset per-entry via the **✎ EDIT** dialog 
 
 - `db.search_wads(query)` does a LIKE match across `wads.title`, `wads.author`, and `tags.tag`
 - Live — fires on every keystroke via `QLineEdit.textChanged`
+
+---
+
+## Finished WADs
+
+- Any WAD can be marked as finished via right-click → **Mark as Finished** in the library list
+- A `[DONE]` chip badge (green) appears next to the title in the WAD list
+- Toggling back is done via right-click → **Mark as Unfinished**
+- `db.set_finished(wad_id, bool)` stores the state as `finished INTEGER DEFAULT 0` in the `wads` table
+- Library list sorting is controlled by the `finished_sort_mode` setting in `config.ini [library]`:
+  - `separator` (default): unfinished WADs first, then a "FINISHED" separator row, then finished WADs
+  - `bottom`: finished WADs moved to end, no separator
+  - `none`: no reordering, WADs stay in alphabetical position
+- The Recent bar can optionally hide finished WADs (`hide_finished_from_recent` setting, default `true`)
+- Both settings are configurable in **⚙ Settings → Library**
+
+---
+
+## Context Menu (WAD list)
+
+Right-clicking a WAD in the library list shows:
+
+1. **▶ Play** — launches the WAD (same as detail panel LAUNCH button)
+2. **✎ Edit** — opens the edit dialog (same as detail panel EDIT button)
+3. *(separator)*
+4. **✓ Mark as Finished** / **Mark as Unfinished** — toggles the finished state
+5. *(separator)*
+6. **Remove from Library** — triggers the delete flow (same as detail panel Remove button)

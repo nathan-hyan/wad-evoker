@@ -45,6 +45,7 @@ def init_db():
         ("map_list",            "TEXT"),
         ("skip_files_prompt",   "INTEGER DEFAULT 0"),
         ("extra_wads",          "TEXT"),
+        ("finished",             "INTEGER DEFAULT 0"),
     ]:
         try:
             c.execute(f"ALTER TABLE wads ADD COLUMN {col} {typedef}")
@@ -90,12 +91,18 @@ def get_wad_by_id(wad_id):
     return dict(row) if row else None
 
 
-def get_last_played(limit=5):
+def get_last_played(limit=5, exclude_finished=False):
     conn = get_connection()
-    rows = conn.execute(
-        "SELECT * FROM wads WHERE last_played IS NOT NULL ORDER BY last_played DESC LIMIT ?",
-        (limit,)
-    ).fetchall()
+    if exclude_finished:
+        rows = conn.execute(
+            "SELECT * FROM wads WHERE last_played IS NOT NULL AND COALESCE(finished, 0) = 0 ORDER BY last_played DESC LIMIT ?",
+            (limit,)
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM wads WHERE last_played IS NOT NULL ORDER BY last_played DESC LIMIT ?",
+            (limit,)
+        ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
@@ -184,6 +191,16 @@ def update_skip_files_prompt(wad_id, value):
     conn.execute(
         "UPDATE wads SET skip_files_prompt = ? WHERE id = ?",
         (1 if value else 0, wad_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def set_finished(wad_id, finished):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE wads SET finished = ? WHERE id = ?",
+        (1 if finished else 0, wad_id)
     )
     conn.commit()
     conn.close()

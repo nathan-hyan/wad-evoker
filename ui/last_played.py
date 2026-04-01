@@ -8,6 +8,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QFont, QPainter, QColor, QPixmap, QPainterPath
 
 import db
+import sourceport
 
 
 class RecentCard(QWidget):
@@ -181,7 +182,8 @@ class LastPlayedBar(QWidget):
             if item.widget():
                 item.widget().deleteLater()
 
-        wads = db.get_last_played(limit=8)
+        exclude = sourceport.get_hide_finished_from_recent()
+        wads = db.get_last_played(limit=8, exclude_finished=exclude)
         if wads:
             self.empty_lbl.hide()
             for wad in wads:

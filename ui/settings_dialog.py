@@ -2,8 +2,9 @@ import os
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QFileDialog, QFrame, QDialogButtonBox,
-    QListWidget, QListWidgetItem, QMessageBox
+    QListWidget, QListWidgetItem, QMessageBox, QComboBox
 )
+from ui.styled_checkbox import StyledCheckBox
 from PyQt6.QtCore import Qt, QTimer
 
 import sourceport
@@ -133,6 +134,51 @@ class SettingsDialog(QDialog):
 
         self.edit_frame.setVisible(False)
         layout.addWidget(self.edit_frame)
+
+        # ── Library ───────────────────────────────────────────────────────────
+        lib_div = QFrame()
+        lib_div.setFrameShape(QFrame.Shape.HLine)
+        lib_div.setObjectName("settingsDivider")
+        layout.addWidget(lib_div)
+
+        lib_section = QLabel("LIBRARY")
+        lib_section.setObjectName("sectionLabel")
+        layout.addWidget(lib_section)
+
+        # Finished sort mode
+        sort_row = QHBoxLayout()
+        sort_row.setSpacing(8)
+        sort_lbl = QLabel("Finished WADs:")
+        sort_lbl.setObjectName("fieldLabel")
+        sort_lbl.setFixedWidth(120)
+        sort_row.addWidget(sort_lbl)
+
+        self.finished_sort_combo = QComboBox()
+        self.finished_sort_combo.setObjectName("spCombo")
+        self.finished_sort_combo.addItem("Move below separator", "separator")
+        self.finished_sort_combo.addItem("Move to bottom", "bottom")
+        self.finished_sort_combo.addItem("Keep in place", "none")
+        current_mode = sourceport.get_finished_sort_mode()
+        for i in range(self.finished_sort_combo.count()):
+            if self.finished_sort_combo.itemData(i) == current_mode:
+                self.finished_sort_combo.setCurrentIndex(i)
+                break
+        self.finished_sort_combo.currentIndexChanged.connect(self._on_finished_sort_changed)
+        sort_row.addWidget(self.finished_sort_combo, 1)
+        sort_row.addStretch()
+        layout.addLayout(sort_row)
+
+        # Show finished badge
+        self.chk_show_badge = StyledCheckBox("Show [DONE] badge on finished WADs")
+        self.chk_show_badge.setChecked(sourceport.get_show_finished_badge())
+        self.chk_show_badge.toggled.connect(self._on_show_badge_changed)
+        layout.addWidget(self.chk_show_badge)
+
+        # Hide finished from recent
+        self.chk_hide_finished = StyledCheckBox("Hide finished WADs from Recent bar")
+        self.chk_hide_finished.setChecked(sourceport.get_hide_finished_from_recent())
+        self.chk_hide_finished.toggled.connect(self._on_hide_finished_changed)
+        layout.addWidget(self.chk_hide_finished)
 
         # ── Software Update ───────────────────────────────────────────────────
         upd_div = QFrame()
@@ -468,6 +514,19 @@ class SettingsDialog(QDialog):
             name = os.path.basename(text)
             self.hint_label.setText(f"✓  {name} found and executable.")
             self.hint_label.setStyleSheet("color: #44aa44;")
+
+    # ── Library settings ────────────────────────────────────────────────────────
+
+    def _on_finished_sort_changed(self, index):
+        mode = self.finished_sort_combo.currentData()
+        if mode:
+            sourceport.set_finished_sort_mode(mode)
+
+    def _on_show_badge_changed(self, checked):
+        sourceport.set_show_finished_badge(checked)
+
+    def _on_hide_finished_changed(self, checked):
+        sourceport.set_hide_finished_from_recent(checked)
 
     # ── Software Update ───────────────────────────────────────────────────────
 

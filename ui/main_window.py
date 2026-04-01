@@ -49,6 +49,13 @@ class MainWindow(QMainWindow):
         # Top bar
         root.addWidget(self._build_topbar())
 
+        # Red accent line below top bar
+        red_line = QFrame()
+        red_line.setFrameShape(QFrame.Shape.HLine)
+        red_line.setObjectName("topBarLine")
+        red_line.setFixedHeight(2)
+        root.addWidget(red_line)
+
         # Last played
         self.last_played_bar = LastPlayedBar()
         self.last_played_bar.wad_launched.connect(self._on_launch_from_recent)
@@ -67,6 +74,10 @@ class MainWindow(QMainWindow):
 
         self.wad_list = WadListWidget()
         self.wad_list.wad_selected.connect(self._on_wad_selected)
+        self.wad_list.play_requested.connect(lambda wad: self._on_launch(wad["id"], wad["filepath"]))
+        self.wad_list.edit_requested.connect(lambda wad: self._on_edit(wad["id"]))
+        self.wad_list.delete_requested.connect(lambda wad: self._on_delete(wad["id"]))
+        self.wad_list.finish_toggled.connect(self._on_finish_toggled)
         splitter.addWidget(self.wad_list)
 
         self.detail_panel = WadDetailPanel()
@@ -151,7 +162,12 @@ class MainWindow(QMainWindow):
 
             #topBar {
                 background: #0d0d0d;
-                border-bottom: 2px solid #b22222;
+            }
+
+            #topBarLine {
+                background: #b22222;
+                border: none;
+                max-height: 2px;
             }
 
             #appTitle {
@@ -507,10 +523,23 @@ class MainWindow(QMainWindow):
         for t in existing - new_set:
             db.remove_tag(wad_id, t)
 
+    def _on_finish_toggled(self, wad):
+        wad_id = wad["id"]
+        new_state = not bool(wad.get("finished"))
+        db.set_finished(wad_id, new_state)
+        self.refresh_library()
+        self.wad_list.select_wad_by_id(wad_id)
+        # Refresh detail panel if this wad is currently shown
+        updated = db.get_wad_by_id(wad_id)
+        if updated:
+            tags = db.get_tags(wad_id)
+            self.detail_panel.show_wad(updated, tags)
+
     def _on_settings(self):
         dlg = SettingsDialog(self)
         dlg.exec()
         self.refresh_source_port_dropdown()
+        self.refresh_library()
 
     def refresh_source_port_dropdown(self):
         """Reload source port profiles into the status bar combo box."""

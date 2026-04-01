@@ -9,7 +9,7 @@ All user data lives under `~/.config/wad-evoker/`:
 | `library.db` | SQLite database                                                       |
 | `wads/`      | Imported WAD/PK3 files — each entry in its own named subfolder        |
 | `titlepics/` | Cached TITLEPIC PNGs (md5-named, extracted on import or first select) |
-| `config.ini` | Source port binary path                                               |
+| `config.ini` | Source port profiles + library settings                                |
 
 ---
 
@@ -30,7 +30,8 @@ CREATE TABLE wads (
     titlepic_path     TEXT,
     added_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_played       TIMESTAMP,
-    skip_files_prompt INTEGER DEFAULT 0  -- skip FilesLaunchDialog on next launch
+    skip_files_prompt INTEGER DEFAULT 0, -- skip FilesLaunchDialog on next launch
+    finished          INTEGER DEFAULT 0   -- 1 = user marked WAD as finished
 );
 
 CREATE TABLE tags (
@@ -53,3 +54,7 @@ CREATE TABLE tags (
 | `delete_requested(int)`      | `WadDetailPanel` | `MainWindow._on_delete`             |
 | `tags_changed(int, list)`    | `WadDetailPanel` | `MainWindow._on_tags_changed`       |
 | `wad_launched(dict)`         | `LastPlayedBar`  | `MainWindow._on_launch_from_recent` |
+| `play_requested(dict)`       | `WadListWidget`  | `MainWindow._on_launch` (via lambda)|
+| `edit_requested(dict)`       | `WadListWidget`  | `MainWindow._on_edit` (via lambda)  |
+| `delete_requested(dict)`     | `WadListWidget`  | `MainWindow._on_delete` (via lambda)|
+| `finish_toggled(dict)`       | `WadListWidget`  | `MainWindow._on_finish_toggled`     |
