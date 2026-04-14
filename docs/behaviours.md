@@ -32,16 +32,28 @@
 4. If DEH/extra-WAD files exist **and** `wad.skip_files_prompt` is falsy: `FilesLaunchDialog` is shown — a modal with one `StyledCheckBox` per file (all checked by default) plus a "Don't ask again" option. User can deselect files or cancel entirely. If "Don't ask again" is checked, `db.update_skip_files_prompt(wad_id, True)` is saved immediately.
 5. If `skip_files_prompt` is already set, all DEH/extra-WAD files are used automatically without showing the dialog.
 6. **Per-WAD extra args**: if the WAD has `extra_args` set (free-text string), it is parsed via `shlex.split()` (with fallback to `.split()` on malformed quotes)
-7. **Per-WAD source port**: if the WAD has `sourceport_profile_id` set, the corresponding profile's binary is looked up. If the profile was deleted, falls back to the active profile silently.
-8. `sourceport.launch_wad(filepath, deh_files=[...], extra_args=[...], binary_override=...)` is called
-9. Runs: `subprocess.Popen([binary, "-file", wad_filepath, ...extra_wads, -deh ..., ...extra_args])`
-10. On success: a `ProcessWatcher` (`QThread`) is spawned to wait for the process to exit
-11. **On process exit** (`_on_process_finished`): `db.update_last_played(wad_id)` and `db.add_play_duration(wad_id, elapsed_seconds)` are called, the Recent bar refreshes, and if the WAD is still selected in the detail panel, it is re-rendered with updated time
-12. On failure: `QMessageBox.warning` shown with the error
+7. **Auto-warp**: if the WAD has `auto_warp` enabled, `-warp` args are injected into the command:
+   - If `warp_target` is set (user override), that map name is converted to `-warp` args via `maplist.map_to_warp_args()`
+   - If `warp_target` is empty, the first map lump is auto-detected from the WAD via `maplist.get_warp_info()`
+   - Skipped if `-warp` is already present in the per-WAD extra args
+   - Supports `MAPxx` (→ `-warp N`) and `ExMy` (→ `-warp E M`) formats; non-standard names are skipped
+8. **Per-WAD source port**: if the WAD has `sourceport_profile_id` set, the corresponding profile's binary is looked up. If the profile was deleted, falls back to the active profile silently.
+9. `sourceport.launch_wad(filepath, deh_files=[...], extra_args=[...], binary_override=...)` is called
+10. Runs: `subprocess.Popen([binary, "-file", wad_filepath, ...extra_wads, -deh ..., ...extra_args])`
+11. On success: a `ProcessWatcher` (`QThread`) is spawned to wait for the process to exit
+12. **On process exit** (`_on_process_finished`): `db.update_last_played(wad_id)` and `db.add_play_duration(wad_id, elapsed_seconds)` are called, the Recent bar refreshes, and if the WAD is still selected in the detail panel, it is re-rendered with updated time
+13. On failure: `QMessageBox.warning` shown with the error
 
 The `skip_files_prompt` flag can be reset per-entry via the **✎ EDIT** dialog ("Skip files selection dialog on launch" checkbox).
 
-Extra args and per-WAD source port are also configurable in the **✎ EDIT** dialog (launch options section below the form).
+Extra args, auto-warp, and per-WAD source port are also configurable in the **✎ EDIT** dialog (launch options section below the form).
+
+### Auto-warp smart default
+
+At import time, `maplist.get_warp_info(filepath)` analyses the WAD/PK3:
+- If the file contains **no** MAPINFO/ZMAPINFO/UMAPINFO lump, **and** the first map is not `MAP01` or `E1M1`, `auto_warp` is set to `true` automatically.
+- WADs with any MAPINFO variant, or that start at `MAP01`/`E1M1`, default to `auto_warp = false`.
+- Existing WADs in the library are not affected (default `false`).
 
 ---
 

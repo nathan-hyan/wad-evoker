@@ -28,6 +28,49 @@ def format_map_list(maps):
     return "\n".join(maps) if maps else ""
 
 
+def get_warp_info(filepath):
+    """
+    Analyse a WAD/PK3 to decide whether auto-warp is needed.
+    Returns (needs_warp: bool, first_map: str or None, has_mapinfo: bool).
+
+    needs_warp is True when:
+      - No MAPINFO/ZMAPINFO/UMAPINFO is present, AND
+      - The first map lump is not MAP01 or E1M1
+    """
+    if not filepath or not os.path.isfile(filepath):
+        return False, None, False
+
+    ext = os.path.splitext(filepath)[1].lower()
+    if ext == ".wad":
+        return _warp_info_from_wad(filepath)
+    elif ext == ".pk3":
+        return _warp_info_from_pk3(filepath)
+    return False, None, False
+
+
+def map_to_warp_args(map_name):
+    """
+    Convert a map lump name to a list of -warp arguments.
+    Returns a list like ["-warp", "7"] or ["-warp", "2", "1"], or [] if
+    the map name doesn't match a known pattern.
+    """
+    if not map_name:
+        return []
+    upper = map_name.upper()
+
+    # MAPxx format
+    m = re.match(r'^MAP(\d+)$', upper)
+    if m:
+        return ["-warp", str(int(m.group(1)))]
+
+    # ExMy format
+    m = re.match(r'^E(\d+)M(\d+)$', upper)
+    if m:
+        return ["-warp", m.group(1), m.group(2)]
+
+    return []
+
+
 # ── WAD ───────────────────────────────────────────────────────────────────────
 
 def _maps_from_wad(wad_path):
@@ -63,6 +106,76 @@ def _parse_mapinfo_from_wad(w):
             except Exception:
                 pass
     return None
+
+
+_DEFAULT_FIRST_MAPS = frozenset({"MAP01", "E1M1"})
+
+
+def _has_mapinfo_lump(w):
+    """Return True if the loaded omgifol WAD contains any MAPINFO/ZMAPINFO/UMAPINFO lump."""
+    for lump_name in ("MAPINFO", "ZMAPINFO", "UMAPINFO"):
+        for group_attr in ("txdefs", "data"):
+            try:
+                group = getattr(w, group_attr, None)
+                if group is not None and lump_name in group:
+                    return True
+            except Exception:
+                pass
+    return False
+
+
+def _warp_info_from_wad(wad_path):
+    """Return (needs_warp, first_map, has_mapinfo) for a WAD file."""
+    try:
+        from omg import WAD
+    except ImportError:
+        return False, None, False
+
+    try:
+        w = WAD(wad_path)
+        map_names = sorted(w.maps.keys())
+        has_mi = _has_mapinfo_lump(w)
+        if not map_names:
+            return False, None, has_mi
+        first = map_names[0]
+        needs = (not has_mi) and (first.upper() not in _DEFAULT_FIRST_MAPS)
+        return needs, first, has_mi
+    except Exception:
+        return False, None, False
+
+
+def _warp_info_from_pk3(pk3_path):
+    """Return (needs_warp, first_map, has_mapinfo) for a PK3 file."""
+    try:
+        with zipfile.ZipFile(pk3_path, "r") as z:
+            names_lower = {n.lower(): n for n in z.namelist()}
+
+            has_mi = any(
+                names_lower.get(c) is not None
+                for c in ("mapinfo.txt", "zmapinfo.txt", "umapinfo.txt",
+                           "mapinfo", "zmapinfo", "umapinfo")
+            )
+
+            # Try embedded WAD files for map detection
+            wad_entries = [n for n in z.namelist() if n.lower().endswith(".wad")]
+            if wad_entries:
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    for entry in wad_entries:
+                        z.extract(entry, tmpdir)
+                        embedded = os.path.join(tmpdir, entry)
+                        try:
+                            from omg import WAD as _WAD
+                            w = _WAD(embedded)
+                            map_names = sorted(w.maps.keys())
+                            if map_names:
+                                first = map_names[0]
+                                needs = (not has_mi) and (first.upper() not in _DEFAULT_FIRST_MAPS)
+                                return needs, first, has_mi
+                        except Exception:
+                            continue
+    except Exception:
+        pass
+    return False, None, False
 
 
 # ── PK3 (ZIP) ─────────────────────────────────────────────────────────────────

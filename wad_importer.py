@@ -44,12 +44,14 @@ def _import_single(source_path):
     _copy_matching_sidecars(os.path.dirname(source_path), filename, entry_dir)
     txt_meta = _find_and_parse_txt(entry_dir, filename)
     maps = maplist.extract_maps(dest)
+    needs_warp, _first_map, _has_mi = maplist.get_warp_info(dest)
     return {
         "filepath": dest,
         "filename": filename,
         "metadata": txt_meta,
         "titlepic_path": titlepic.extract_titlepic(dest),
         "map_list": maplist.format_map_list(maps),
+        "auto_warp": needs_warp,
     }
 
 
@@ -130,6 +132,7 @@ def _build_zip_result(entry_dir, primary_path, all_dest_paths):
     secondary = [p for p in all_dest_paths if p != primary_path]
     txt_meta = _find_and_parse_txt(entry_dir, os.path.basename(primary_path))
     maps = maplist.extract_maps(primary_path)
+    needs_warp, _first_map, _has_mi = maplist.get_warp_info(primary_path)
     extra_wads_str = "\n".join(secondary) if secondary else None
     return {
         "filepath": primary_path,
@@ -138,6 +141,7 @@ def _build_zip_result(entry_dir, primary_path, all_dest_paths):
         "titlepic_path": titlepic.extract_titlepic(primary_path),
         "map_list": maplist.format_map_list(maps),
         "extra_wads": extra_wads_str,
+        "auto_warp": needs_warp,
     }
 
 

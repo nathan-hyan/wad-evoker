@@ -130,6 +130,17 @@ class WadEditDialog(QDialog):
         self.skip_prompt_check = StyledCheckBox("Skip files selection dialog on launch")
         left_layout.addWidget(self.skip_prompt_check)
 
+        self.auto_warp_check = StyledCheckBox("Auto-warp to first map")
+        left_layout.addWidget(self.auto_warp_check)
+
+        warp_target_lbl = QLabel("WARP TARGET")
+        warp_target_lbl.setObjectName("sectionLabel")
+        left_layout.addWidget(warp_target_lbl)
+        self.warp_target_input = QLineEdit()
+        self.warp_target_input.setObjectName("textInput")
+        self.warp_target_input.setPlaceholderText("Leave empty to auto-detect from first map")
+        left_layout.addWidget(self.warp_target_input)
+
         extra_args_lbl = QLabel("EXTRA LAUNCH ARGS")
         extra_args_lbl.setObjectName("sectionLabel")
         left_layout.addWidget(extra_args_lbl)
@@ -334,6 +345,9 @@ class WadEditDialog(QDialog):
 
         self.extra_args_input.setText(self._wad.get("extra_args") or "")
 
+        self.auto_warp_check.setChecked(bool(self._wad.get("auto_warp")))
+        self.warp_target_input.setText(self._wad.get("warp_target") or "")
+
         # Populate source port combo
         self.sourceport_combo.addItem("Default (use active)", None)
         profiles = sourceport.get_profiles()
@@ -520,6 +534,11 @@ class WadEditDialog(QDialog):
             )
             db.update_skip_files_prompt(self._wad_id, self.skip_prompt_check.isChecked())
             db.update_extra_args(self._wad_id, self.extra_args_input.text())
+            db.update_auto_warp(
+                self._wad_id,
+                self.auto_warp_check.isChecked(),
+                self.warp_target_input.text(),
+            )
             sp_profile_id = self.sourceport_combo.currentData()
             db.update_sourceport_profile_id(self._wad_id, sp_profile_id)
         except sqlite3.IntegrityError:

@@ -49,6 +49,8 @@ def init_db():
         ("play_duration_seconds", "INTEGER DEFAULT 0"),
         ("extra_args",            "TEXT"),
         ("sourceport_profile_id", "INTEGER"),
+        ("auto_warp",              "INTEGER DEFAULT 0"),
+        ("warp_target",            "TEXT"),
     ]:
         try:
             c.execute(f"ALTER TABLE wads ADD COLUMN {col} {typedef}")
@@ -235,6 +237,27 @@ def update_extra_args(wad_id, args_string):
     value = args_string.strip() if args_string else None
     conn = get_connection()
     conn.execute("UPDATE wads SET extra_args = ? WHERE id = ?", (value, wad_id))
+    conn.commit()
+    conn.close()
+
+
+def get_auto_warp(wad_id):
+    """Return (enabled: bool, target: str or None) for the auto-warp setting."""
+    conn = get_connection()
+    row = conn.execute("SELECT auto_warp, warp_target FROM wads WHERE id = ?", (wad_id,)).fetchone()
+    conn.close()
+    if not row:
+        return False, None
+    return bool(row["auto_warp"]), (row["warp_target"] or None)
+
+
+def update_auto_warp(wad_id, enabled, target=None):
+    """Store auto-warp setting. target is the override map string, or None for auto-detect."""
+    conn = get_connection()
+    conn.execute(
+        "UPDATE wads SET auto_warp = ?, warp_target = ? WHERE id = ?",
+        (1 if enabled else 0, target.strip() if target and target.strip() else None, wad_id)
+    )
     conn.commit()
     conn.close()
 

@@ -316,6 +316,8 @@ class MainWindow(QMainWindow):
                 extra_wads=r.get("extra_wads"),
             )
             if wad:
+                if r.get("auto_warp"):
+                    db.update_auto_warp(wad["id"], True)
                 imported += 1
                 last_imported_id = wad["id"]
         if imported:
@@ -446,6 +448,15 @@ class MainWindow(QMainWindow):
             except ValueError:
                 parsed_extra_args = raw_args.split()
 
+        # Auto-warp: inject -warp if enabled and not already in extra args
+        auto_warp_on, warp_target = db.get_auto_warp(wad_id)
+        if auto_warp_on:
+            already_has_warp = parsed_extra_args and "-warp" in parsed_extra_args
+            if not already_has_warp:
+                warp_args = self._compute_warp_args(warp_target, wad_filepath)
+                if warp_args:
+                    parsed_extra_args = (parsed_extra_args or []) + warp_args
+
         # Per-WAD source port override
         binary_override = None
         sp_profile_id = db.get_sourceport_profile_id(wad_id)
@@ -482,6 +493,16 @@ class MainWindow(QMainWindow):
         if wad and self.detail_panel._current_wad and self.detail_panel._current_wad["id"] == wad_id:
             tags = db.get_tags(wad_id)
             self.detail_panel.show_wad(wad, tags)
+
+    def _compute_warp_args(self, warp_target, wad_filepath):
+        """Build the -warp arg list. Uses explicit target if set, else auto-detects from WAD."""
+        if warp_target:
+            return maplist.map_to_warp_args(warp_target)
+
+        _needs, first_map, _has_mi = maplist.get_warp_info(wad_filepath)
+        if first_map:
+            return maplist.map_to_warp_args(first_map)
+        return []
 
     def _on_launch_from_recent(self, wad):
         self._on_launch(wad["id"], wad["filepath"])

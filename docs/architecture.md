@@ -35,7 +35,9 @@ CREATE TABLE wads (
     finished          INTEGER DEFAULT 0,  -- 1 = user marked WAD as finished
     play_duration_seconds INTEGER DEFAULT 0, -- cumulative play time in seconds
     extra_args        TEXT,               -- user-defined extra launch args string
-    sourceport_profile_id INTEGER          -- per-WAD source port profile override (NULL = use active)
+    sourceport_profile_id INTEGER,         -- per-WAD source port profile override (NULL = use active)
+    auto_warp         INTEGER DEFAULT 0,  -- 1 = auto-inject -warp on launch
+    warp_target       TEXT                -- override map name for -warp (NULL = auto-detect from first map)
 );
 
 CREATE TABLE tags (
