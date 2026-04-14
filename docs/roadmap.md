@@ -20,6 +20,7 @@
 - [ ] **Full MAPINFO support** - Map list, Episode list and all of the MAPINFO goodies that could help the user identify the mod. Display them all in the metadata section of the wad
 - [ ] **Gameplay Mod Support** - Some wads or PK3 won't contain any maps, they're just gameplay mods. They should be loaded alongside a map or the regular IWAD for them to work. We need to support them by including an Gameplay Mod selection option in the launch dialog. This should be checked at the import phase. If the wad doesnt include any map lumps or if the MAPINFO (or lack there of) doesn't specify any maps we should tell the user "This looks like a gameplay mod, tag as such?" and like the finished sorting, add one section that displays the gameplay mods. When the user wants to launch, ask the iWAD and the pWAD (or skip if the user doesnt want to) to launch it alongside
 - [ ] **IWAD Launch Support** - Sometimes we don't want to play a custom map, but regular Doom... or we might want to play a Gameplay mod with the regular maps. So we need a section that includes the IWADS. They should be able to be launched with the -iwad param and if we want to include a gameplay mod, let the user choose from it
+- [ ] **Multi-wad Import** - Select all of my wad collection and drag them into the app. Identify if there's a duplicate. Inform the user and let them decide if import it regardless or discard it
 
 ---
 
@@ -37,3 +38,4 @@
 - [ ] **Sort / filter** — sort library by title, date added, last played; filter by tag
 - [ ] **Packaging** — `pyproject.toml`, `.desktop` file for Linux app launcher integration, optional PyInstaller bundle
 - [x] **Multi-WAD support** — ZIP imports with multiple WADs produce a single library entry. The WAD matching the zip name is auto-selected as primary; when none matches a side-by-side picker dialog (WAD list + .txt readme) lets the user choose. Secondary WADs are stored in the `extra_wads` DB column. On launch, extra WADs appear in the same `FilesLaunchDialog` checklist as DEH files and are appended to the `-file` argument.
+- [ ] **Database migration when a new update is completed** - Sometime we will add a new feature that would be useful in an already imported wad. Ask the user if they want their database re-scanned to apply the new features.
