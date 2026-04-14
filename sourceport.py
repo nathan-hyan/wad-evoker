@@ -136,6 +136,24 @@ def set_active_profile(profile_id):
     _save_config(cfg)
 
 
+def get_profile_binary(profile_id):
+    """Return the binary path of a specific profile, or empty string if not found."""
+    if not profile_id:
+        return ""
+    cfg = _get_config()
+    section = f"{_SECTION_PREFIX}{profile_id}"
+    return cfg.get(section, "binary", fallback="")
+
+
+def get_profile_name(profile_id):
+    """Return the name of a specific profile, or empty string if not found."""
+    if not profile_id:
+        return ""
+    cfg = _get_config()
+    section = f"{_SECTION_PREFIX}{profile_id}"
+    return cfg.get(section, "name", fallback="")
+
+
 def get_active_binary():
     """Return the binary path of the active profile, or empty string."""
     pid = get_active_profile_id()
@@ -236,7 +254,7 @@ def launch_wad(wad_filepath, extra_args=None, deh_files=None, extra_wad_files=No
         cmd.extend(extra_args)
 
     try:
-        subprocess.Popen(cmd)
-        return True, ""
+        proc = subprocess.Popen(cmd)
+        return True, "", proc
     except Exception as e:
-        return False, str(e)
+        return False, str(e), None

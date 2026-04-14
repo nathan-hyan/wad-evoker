@@ -64,4 +64,4 @@ No restart needed — the change applies to the next launch.
 
 ---
 
-_Nice-to-haves for future iterations: TITLEPIC display, time played tracking, screenshots, multiple named source port profiles._
+_Nice-to-haves for future iterations: screenshots, stats tracking, IWAD selection, sort/filter._

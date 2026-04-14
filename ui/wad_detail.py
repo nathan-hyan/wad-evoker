@@ -1,5 +1,6 @@
 import os
 
+import sourceport
 import wad_importer
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -248,9 +249,12 @@ class WadDetailPanel(QWidget):
         self.lbl_year     = self._make_meta_row("YEAR")
         self.lbl_game     = self._make_meta_row("GAME")
         self.lbl_played   = self._make_meta_row("LAST PLAYED")
+        self.lbl_time     = self._make_meta_row("TIME PLAYED")
+        self.lbl_srcport  = self._make_meta_row("SOURCE PORT")
 
         for row in [self.lbl_filename, self.lbl_author, self.lbl_year,
-                    self.lbl_game, self.lbl_played]:
+                    self.lbl_game, self.lbl_played, self.lbl_time,
+                    self.lbl_srcport]:
             meta_layout.addWidget(row)
 
         # Meta + map list + TITLEPIC side-by-side
@@ -486,6 +490,17 @@ class WadDetailPanel(QWidget):
             #btnDelete:hover { border-color: #8b0000; color: #cc2200; }
         """)
 
+    @staticmethod
+    def _format_duration(seconds):
+        if seconds < 60:
+            return "< 1m"
+        minutes = seconds // 60
+        hours = minutes // 60
+        mins = minutes % 60
+        if hours > 0:
+            return f"{hours}h {mins:02d}m"
+        return f"{mins}m"
+
     # ── PUBLIC ────────────────────────────────────────────────────────────────
 
     def show_wad(self, wad, tags):
@@ -521,6 +536,20 @@ class WadDetailPanel(QWidget):
 
         lp = wad.get("last_played")
         self.lbl_played._val_label.setText(lp[:16].replace("T", " ") if lp else "Never")
+
+        dur = wad.get("play_duration_seconds") or 0
+        self.lbl_time._val_label.setText(self._format_duration(dur) if dur > 0 else "—")
+
+        sp_id = wad.get("sourceport_profile_id")
+        if sp_id:
+            sp_name = sourceport.get_profile_name(sp_id)
+            if sp_name:
+                self.lbl_srcport._val_label.setText(sp_name)
+                self.lbl_srcport.show()
+            else:
+                self.lbl_srcport.hide()
+        else:
+            self.lbl_srcport.hide()
 
         self.desc_text.setPlainText(wad.get("description") or "No description available.")
 

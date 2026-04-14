@@ -27,15 +27,21 @@
 ## Launch flow
 
 1. User selects a WAD and clicks **▶ LAUNCH**
-2. `wad_importer.find_deh_files(filepath)` checks for `.deh` files in the entry subfolder
-3. If DEH files exist **and** `wad.skip_files_prompt` is falsy: `FilesLaunchDialog` is shown — a modal with one `StyledCheckBox` per file (all checked by default) plus a "Don't ask again" option. User can deselect files or cancel entirely. If "Don't ask again" is checked, `db.update_skip_files_prompt(wad_id, True)` is saved immediately.
-4. If `skip_files_prompt` is already set, all DEH files are used automatically without showing the dialog.
-5. `sourceport.launch_wad(filepath, deh_files=[...])` is called
-6. Runs: `subprocess.Popen([binary, "-file", wad_filepath, "-deh", deh1, "-deh", deh2, ...])`
-7. On success: `db.update_last_played(wad_id)` is called, Recent bar refreshes
-8. On failure: `QMessageBox.warning` shown with the error
+2. **Re-launch guard**: if a `ProcessWatcher` is already active for this WAD ID, an info dialog is shown and launch is aborted
+3. `wad_importer.find_deh_files(filepath)` checks for `.deh` files in the entry subfolder
+4. If DEH/extra-WAD files exist **and** `wad.skip_files_prompt` is falsy: `FilesLaunchDialog` is shown — a modal with one `StyledCheckBox` per file (all checked by default) plus a "Don't ask again" option. User can deselect files or cancel entirely. If "Don't ask again" is checked, `db.update_skip_files_prompt(wad_id, True)` is saved immediately.
+5. If `skip_files_prompt` is already set, all DEH/extra-WAD files are used automatically without showing the dialog.
+6. **Per-WAD extra args**: if the WAD has `extra_args` set (free-text string), it is parsed via `shlex.split()` (with fallback to `.split()` on malformed quotes)
+7. **Per-WAD source port**: if the WAD has `sourceport_profile_id` set, the corresponding profile's binary is looked up. If the profile was deleted, falls back to the active profile silently.
+8. `sourceport.launch_wad(filepath, deh_files=[...], extra_args=[...], binary_override=...)` is called
+9. Runs: `subprocess.Popen([binary, "-file", wad_filepath, ...extra_wads, -deh ..., ...extra_args])`
+10. On success: a `ProcessWatcher` (`QThread`) is spawned to wait for the process to exit
+11. **On process exit** (`_on_process_finished`): `db.update_last_played(wad_id)` and `db.add_play_duration(wad_id, elapsed_seconds)` are called, the Recent bar refreshes, and if the WAD is still selected in the detail panel, it is re-rendered with updated time
+12. On failure: `QMessageBox.warning` shown with the error
 
-The `skip_files_prompt` flag can be reset per-entry via the **✎ EDIT** dialog ("Skip files selection dialog on launch" checkbox at the bottom of the form).
+The `skip_files_prompt` flag can be reset per-entry via the **✎ EDIT** dialog ("Skip files selection dialog on launch" checkbox).
+
+Extra args and per-WAD source port are also configurable in the **✎ EDIT** dialog (launch options section below the form).
 
 ---
 
@@ -57,7 +63,7 @@ The `skip_files_prompt` flag can be reset per-entry via the **✎ EDIT** dialog 
 - Manageable via **⚙ Settings → Source Ports** (add/edit/delete) — no restart needed
 - A `QComboBox` in the status bar (bottom-right) shows the active profile and allows switching
 - Settings dialog validates binary path live: checks `os.path.isfile` + `os.access(X_OK)`
-- Launch always uses the active profile's binary
+- Launch uses the active profile's binary by default; individual WADs can override this via a per-WAD source port binding (set in the Edit dialog, stored as `sourceport_profile_id` in the DB)
 
 ---
 

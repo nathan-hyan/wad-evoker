@@ -32,7 +32,10 @@ CREATE TABLE wads (
     last_played       TIMESTAMP,
     skip_files_prompt INTEGER DEFAULT 0, -- skip FilesLaunchDialog on next launch
     extra_wads        TEXT,               -- newline-separated extra WAD/PK3 paths
-    finished          INTEGER DEFAULT 0   -- 1 = user marked WAD as finished
+    finished          INTEGER DEFAULT 0,  -- 1 = user marked WAD as finished
+    play_duration_seconds INTEGER DEFAULT 0, -- cumulative play time in seconds
+    extra_args        TEXT,               -- user-defined extra launch args string
+    sourceport_profile_id INTEGER          -- per-WAD source port profile override (NULL = use active)
 );
 
 CREATE TABLE tags (
@@ -59,3 +62,4 @@ CREATE TABLE tags (
 | `edit_requested(dict)`       | `WadListWidget`  | `MainWindow._on_edit` (via lambda)  |
 | `delete_requested(dict)`     | `WadListWidget`  | `MainWindow._on_delete` (via lambda)|
 | `finish_toggled(dict)`       | `WadListWidget`  | `MainWindow._on_finish_toggled`     |
+| `ProcessWatcher.finished(int, int)` | `ProcessWatcher` | `MainWindow._on_process_finished` |

@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 
 import db
+import sourceport
 import sqlite3
 from ui.styled_checkbox import StyledCheckBox
 
@@ -128,6 +129,21 @@ class WadEditDialog(QDialog):
 
         self.skip_prompt_check = StyledCheckBox("Skip files selection dialog on launch")
         left_layout.addWidget(self.skip_prompt_check)
+
+        extra_args_lbl = QLabel("EXTRA LAUNCH ARGS")
+        extra_args_lbl.setObjectName("sectionLabel")
+        left_layout.addWidget(extra_args_lbl)
+        self.extra_args_input = QLineEdit()
+        self.extra_args_input.setObjectName("textInput")
+        self.extra_args_input.setPlaceholderText("e.g. -skill 4 -warp 1")
+        left_layout.addWidget(self.extra_args_input)
+
+        sp_lbl = QLabel("SOURCE PORT")
+        sp_lbl.setObjectName("sectionLabel")
+        left_layout.addWidget(sp_lbl)
+        self.sourceport_combo = QComboBox()
+        self.sourceport_combo.setObjectName("comboInput")
+        left_layout.addWidget(self.sourceport_combo)
 
         left.setFixedWidth(self._left_fixed_width)
         left.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
@@ -316,6 +332,19 @@ class WadEditDialog(QDialog):
         self.map_list_text.setPlainText(self._wad.get("map_list") or "")
         self.skip_prompt_check.setChecked(bool(self._wad.get("skip_files_prompt")))
 
+        self.extra_args_input.setText(self._wad.get("extra_args") or "")
+
+        # Populate source port combo
+        self.sourceport_combo.addItem("Default (use active)", None)
+        profiles = sourceport.get_profiles()
+        stored_sp_id = self._wad.get("sourceport_profile_id")
+        select_idx = 0
+        for i, p in enumerate(profiles):
+            self.sourceport_combo.addItem(p["name"], p["id"])
+            if p["id"] == stored_sp_id:
+                select_idx = i + 1  # +1 for "Default" entry
+        self.sourceport_combo.setCurrentIndex(select_idx)
+
         txt_path = self._find_sidecar_txt(self._wad.get("filepath") or "", self._wad.get("filename") or "")
         self._load_sidecar_txt(txt_path)
         self._set_sidecar_visible(bool(txt_path))
@@ -490,6 +519,9 @@ class WadEditDialog(QDialog):
                 map_list=self.map_list_text.toPlainText().strip() or "",
             )
             db.update_skip_files_prompt(self._wad_id, self.skip_prompt_check.isChecked())
+            db.update_extra_args(self._wad_id, self.extra_args_input.text())
+            sp_profile_id = self.sourceport_combo.currentData()
+            db.update_sourceport_profile_id(self._wad_id, sp_profile_id)
         except sqlite3.IntegrityError:
             self.hint_label.setText("That file is already in your library.")
             self.hint_label.setStyleSheet("color: #cc2200;")

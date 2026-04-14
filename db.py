@@ -46,6 +46,9 @@ def init_db():
         ("skip_files_prompt",   "INTEGER DEFAULT 0"),
         ("extra_wads",          "TEXT"),
         ("finished",             "INTEGER DEFAULT 0"),
+        ("play_duration_seconds", "INTEGER DEFAULT 0"),
+        ("extra_args",            "TEXT"),
+        ("sourceport_profile_id", "INTEGER"),
     ]:
         try:
             c.execute(f"ALTER TABLE wads ADD COLUMN {col} {typedef}")
@@ -202,6 +205,54 @@ def set_finished(wad_id, finished):
         "UPDATE wads SET finished = ? WHERE id = ?",
         (1 if finished else 0, wad_id)
     )
+    conn.commit()
+    conn.close()
+
+
+def add_play_duration(wad_id, seconds):
+    """Add *seconds* to the cumulative play duration for a WAD."""
+    conn = get_connection()
+    conn.execute(
+        "UPDATE wads SET play_duration_seconds = COALESCE(play_duration_seconds, 0) + ? WHERE id = ?",
+        (seconds, wad_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_extra_args(wad_id):
+    """Return the extra launch args string for a WAD, or empty string."""
+    conn = get_connection()
+    row = conn.execute("SELECT extra_args FROM wads WHERE id = ?", (wad_id,)).fetchone()
+    conn.close()
+    if row and row["extra_args"]:
+        return row["extra_args"]
+    return ""
+
+
+def update_extra_args(wad_id, args_string):
+    """Store extra launch args string for a WAD."""
+    value = args_string.strip() if args_string else None
+    conn = get_connection()
+    conn.execute("UPDATE wads SET extra_args = ? WHERE id = ?", (value, wad_id))
+    conn.commit()
+    conn.close()
+
+
+def get_sourceport_profile_id(wad_id):
+    """Return the per-WAD source port profile id, or None if using default."""
+    conn = get_connection()
+    row = conn.execute("SELECT sourceport_profile_id FROM wads WHERE id = ?", (wad_id,)).fetchone()
+    conn.close()
+    if row and row["sourceport_profile_id"]:
+        return row["sourceport_profile_id"]
+    return None
+
+
+def update_sourceport_profile_id(wad_id, profile_id):
+    """Store per-WAD source port profile id. Pass None to clear (use default)."""
+    conn = get_connection()
+    conn.execute("UPDATE wads SET sourceport_profile_id = ? WHERE id = ?", (profile_id, wad_id))
     conn.commit()
     conn.close()
 

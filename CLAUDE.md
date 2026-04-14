@@ -27,6 +27,7 @@ wad-evoker/
 ├── titlepic.py              # TITLEPIC extraction: WAD (omgifol) + PK3 (zip strategies) → cached PNG
 ├── maplist.py               # Map list extraction: WAD/PK3 via omgifol, MAPINFO/ZMAPINFO/UMAPINFO parsing
 ├── wad_importer.py          # File import: .wad, .pk3, .zip extraction + .txt metadata parser + find_deh_files()
+├── process_watcher.py       # QThread that monitors a launched subprocess and emits (wad_id, elapsed_seconds) on exit
 ├── sourceport.py            # Source port config (read/write binary path) + subprocess launch (with -deh support)
 ├── version.py               # Single source of truth for __version__ (e.g. "1.0.0")
 ├── updater.py               # Auto-update: GitHub release check, zip download, file replacement, restart

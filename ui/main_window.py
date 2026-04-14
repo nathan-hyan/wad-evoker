@@ -1,4 +1,5 @@
 import os
+import shlex
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QLabel, QPushButton, QLineEdit, QFileDialog,
@@ -23,6 +24,7 @@ from ui.settings_dialog import SettingsDialog
 from ui.update_progress_dialog import UpdateProgressDialog
 from ui.files_launch_dialog import FilesLaunchDialog
 from ui.primary_wad_picker_dialog import PrimaryWadPickerDialog
+from process_watcher import ProcessWatcher
 
 
 class MainWindow(QMainWindow):
@@ -32,6 +34,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1000, 660)
         self.resize(1200, 760)
         self.setAcceptDrops(True)
+        self._active_watchers = {}  # wad_id -> ProcessWatcher
         self._build_ui()
         self._apply_styles()
         self.refresh_library()
@@ -406,6 +409,14 @@ class MainWindow(QMainWindow):
         self.wad_list.select_wad_by_id(wad_id)
 
     def _on_launch(self, wad_id, wad_filepath):
+        # Prevent re-launch while already running
+        if wad_id in self._active_watchers:
+            QMessageBox.information(
+                self, "Already Running",
+                "This WAD is already running. Wait for it to exit before launching again."
+            )
+            return
+
         extra_wads = db.get_extra_wads(wad_id)
         deh_files = wad_importer.find_deh_files(wad_filepath)
         all_extra = extra_wads + deh_files
@@ -426,17 +437,51 @@ class MainWindow(QMainWindow):
         selected_wads = [f for f in selected_extra if os.path.splitext(f)[1].lower() in (".wad", ".pk3")]
         selected_deh = [f for f in selected_extra if f.lower().endswith(".deh")]
 
-        ok, err = sourceport.launch_wad(
+        # Per-WAD extra args
+        raw_args = db.get_extra_args(wad_id)
+        parsed_extra_args = None
+        if raw_args:
+            try:
+                parsed_extra_args = shlex.split(raw_args)
+            except ValueError:
+                parsed_extra_args = raw_args.split()
+
+        # Per-WAD source port override
+        binary_override = None
+        sp_profile_id = db.get_sourceport_profile_id(wad_id)
+        if sp_profile_id:
+            binary = sourceport.get_profile_binary(sp_profile_id)
+            if binary:
+                binary_override = binary
+            # If profile was deleted, binary is empty — fall back to active (no override)
+
+        ok, err, proc = sourceport.launch_wad(
             wad_filepath,
             extra_wad_files=selected_wads or None,
             deh_files=selected_deh or None,
+            extra_args=parsed_extra_args,
+            binary_override=binary_override,
         )
         if ok:
-            db.update_last_played(wad_id)
-            self.last_played_bar.refresh()
-            self.status.showMessage(f"Launched!", 3000)
+            self.status.showMessage("Launched!", 3000)
+            watcher = ProcessWatcher(proc, wad_id, parent=self)
+            watcher.finished.connect(self._on_process_finished)
+            self._active_watchers[wad_id] = watcher
+            watcher.start()
         else:
             QMessageBox.warning(self, "Launch Failed", err)
+
+    def _on_process_finished(self, wad_id, elapsed_seconds):
+        self._active_watchers.pop(wad_id, None)
+        db.update_last_played(wad_id)
+        if elapsed_seconds > 0:
+            db.add_play_duration(wad_id, elapsed_seconds)
+        self.last_played_bar.refresh()
+        # Refresh detail panel if this WAD is currently shown
+        wad = db.get_wad_by_id(wad_id)
+        if wad and self.detail_panel._current_wad and self.detail_panel._current_wad["id"] == wad_id:
+            tags = db.get_tags(wad_id)
+            self.detail_panel.show_wad(wad, tags)
 
     def _on_launch_from_recent(self, wad):
         self._on_launch(wad["id"], wad["filepath"])

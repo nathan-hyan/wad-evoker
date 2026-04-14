@@ -23,12 +23,12 @@
 ## Planned / Nice-to-Haves
 
 - [x] **Multiple named source port profiles** — `sourceport.py` supports multiple profiles stored as `[sourceport_N]` sections in `config.ini` with full CRUD. The active profile persists across sessions via `[sourceport] active`. Legacy single-binary configs are auto-migrated on first load. Settings dialog provides a profile list with add/edit/delete. A `QComboBox` in the status bar (bottom-right) shows the active profile and allows switching. Launch uses the active profile's binary.
-- [ ] **Time played tracking** — store `play_duration_seconds` in `wads` table; hook into process monitoring via `subprocess` + `time`
+- [x] **Time played tracking** — `play_duration_seconds INTEGER DEFAULT 0` in `wads` table. A `ProcessWatcher` (`QThread`) monitors each launched subprocess; on exit it adds the elapsed seconds to the cumulative total and updates `last_played`. Re-launching a WAD while it's already running is blocked. Displayed as a `TIME PLAYED` meta row in the detail panel (e.g. `2h 34m`).
 - [ ] **Screenshot support** — store screenshot paths, display in detail panel
 - [ ] **Stats** — similar to DoomLauncher (https://github.com/nstlaurent/DoomLauncher): kills, deaths, secrets per session
 - [ ] **IWAD selection** — let user specify the base IWAD (`doom2.wad`, `doom.wad`, etc.) passed via `-iwad`
-- [ ] **Per-WAD source port binding** — allow assigning a specific source port profile to a WAD, overriding the global active profile on launch
-- [ ] **Extra args per WAD** — store and pass custom launch args (e.g. `-skill 4 -warp 1`)
+- [x] **Per-WAD source port binding** — `sourceport_profile_id INTEGER` column in the `wads` table (nullable, NULL = use active). Configurable via a `QComboBox` in the Edit dialog ("Default (use active)" + all profiles). A `SOURCE PORT` meta row in the detail panel shows the override name (hidden when default). On launch, the profile ID is resolved to a binary and passed as `binary_override`; if the profile was deleted, falls back to the active profile silently.
+- [x] **Extra args per WAD** — `extra_args TEXT` column in the `wads` table. Editable via a free-text `QLineEdit` in the Edit dialog (launch options section, placeholder: `e.g. -skill 4 -warp 1`). Parsed at launch time via `shlex.split()` (with `.split()` fallback) and appended to the source port command line.
 - [x] **Finished WADs** — mark WADs as finished via right-click context menu. Finished WADs show a `[DONE]` badge in the library list. Configurable sorting (separator/bottom/in-place) and optional hiding from the Recent bar. Settings in ⚙ Settings → Library.
 - [x] **Context menu** — right-click on library list items exposes Play, Edit, Mark as Finished/Unfinished, and Remove from Library actions.
 - [ ] **Sort / filter** — sort library by title, date added, last played; filter by tag
