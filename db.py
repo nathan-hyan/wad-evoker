@@ -51,6 +51,8 @@ def init_db():
         ("sourceport_profile_id", "INTEGER"),
         ("auto_warp",              "INTEGER DEFAULT 0"),
         ("warp_target",            "TEXT"),
+        ("mapinfo_data",           "TEXT"),
+        ("is_gameplay_mod",         "INTEGER DEFAULT 0"),
     ]:
         try:
             c.execute(f"ALTER TABLE wads ADD COLUMN {col} {typedef}")
@@ -100,12 +102,12 @@ def get_last_played(limit=5, exclude_finished=False):
     conn = get_connection()
     if exclude_finished:
         rows = conn.execute(
-            "SELECT * FROM wads WHERE last_played IS NOT NULL AND COALESCE(finished, 0) = 0 ORDER BY last_played DESC LIMIT ?",
+            "SELECT * FROM wads WHERE last_played IS NOT NULL AND COALESCE(finished, 0) = 0 AND COALESCE(is_gameplay_mod, 0) = 0 ORDER BY last_played DESC LIMIT ?",
             (limit,)
         ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT * FROM wads WHERE last_played IS NOT NULL ORDER BY last_played DESC LIMIT ?",
+            "SELECT * FROM wads WHERE last_played IS NOT NULL AND COALESCE(is_gameplay_mod, 0) = 0 ORDER BY last_played DESC LIMIT ?",
             (limit,)
         ).fetchall()
     conn.close()
@@ -201,6 +203,26 @@ def update_skip_files_prompt(wad_id, value):
     conn.close()
 
 
+def set_gameplay_mod(wad_id, value):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE wads SET is_gameplay_mod = ? WHERE id = ?",
+        (1 if value else 0, wad_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_gameplay_mods():
+    """Return all WADs marked as gameplay mods."""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM wads WHERE COALESCE(is_gameplay_mod, 0) = 1 ORDER BY title COLLATE NOCASE"
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 def set_finished(wad_id, finished):
     conn = get_connection()
     conn.execute(
@@ -237,6 +259,27 @@ def update_extra_args(wad_id, args_string):
     value = args_string.strip() if args_string else None
     conn = get_connection()
     conn.execute("UPDATE wads SET extra_args = ? WHERE id = ?", (value, wad_id))
+    conn.commit()
+    conn.close()
+
+
+def get_mapinfo_data(wad_id):
+    """Return the raw mapinfo_data JSON string for a WAD, or None."""
+    conn = get_connection()
+    row = conn.execute("SELECT mapinfo_data FROM wads WHERE id = ?", (wad_id,)).fetchone()
+    conn.close()
+    if row and row["mapinfo_data"]:
+        return row["mapinfo_data"]
+    return None
+
+
+def update_mapinfo_data(wad_id, json_str):
+    """Store MAPINFO data JSON string for a WAD."""
+    conn = get_connection()
+    conn.execute(
+        "UPDATE wads SET mapinfo_data = ? WHERE id = ?",
+        (json_str, wad_id)
+    )
     conn.commit()
     conn.close()
 

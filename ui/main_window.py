@@ -318,6 +318,15 @@ class MainWindow(QMainWindow):
             if wad:
                 if r.get("auto_warp"):
                     db.update_auto_warp(wad["id"], True)
+                # Detect potential gameplay mod (no maps)
+                has_maps = bool((r.get("map_list") or "").strip())
+                if not has_maps:
+                    result = self._prompt_gameplay_mod(wad["title"])
+                    if result == "gameplay_mod":
+                        db.set_gameplay_mod(wad["id"], True)
+                    elif result == "cancel":
+                        db.delete_wad(wad["id"])
+                        continue
                 imported += 1
                 last_imported_id = wad["id"]
         if imported:
@@ -328,6 +337,30 @@ class MainWindow(QMainWindow):
                 self.wad_list.select_wad_by_id(last_imported_id)
         else:
             self.status.showMessage("No new WADs imported (already in library or unsupported).", 4000)
+
+    def _prompt_gameplay_mod(self, title):
+        """Show a 3-option dialog when an imported WAD has no maps.
+        Returns 'gameplay_mod', 'regular', or 'cancel'.
+        """
+        msg = QMessageBox(self)
+        msg.setWindowTitle("No Maps Detected")
+        msg.setIcon(QMessageBox.Icon.Question)
+        msg.setText(f'"{title}" doesn\'t contain any maps.')
+        msg.setInformativeText(
+            "This looks like a gameplay mod (loaded alongside other WADs).\n"
+            "How would you like to import it?"
+        )
+        btn_mod = msg.addButton("Mark as Gameplay Mod", QMessageBox.ButtonRole.AcceptRole)
+        btn_regular = msg.addButton("Import as Regular WAD", QMessageBox.ButtonRole.ActionRole)
+        btn_cancel = msg.addButton(QMessageBox.StandardButton.Cancel)
+        msg.setDefaultButton(btn_mod)
+        msg.exec()
+        clicked = msg.clickedButton()
+        if clicked == btn_mod:
+            return "gameplay_mod"
+        elif clicked == btn_regular:
+            return "regular"
+        return "cancel"
 
     def _pick_primary_wad(self, selection_data):
         """Show PrimaryWadPickerDialog and return a finalised result dict, or None on cancel."""
@@ -374,6 +407,14 @@ class MainWindow(QMainWindow):
                 ml = maplist.format_map_list(maps)
                 db.update_map_list(wad_id, ml)
                 wad["map_list"] = ml
+
+        if not wad.get("mapinfo_data"):
+            mi_data = maplist.extract_mapinfo_data(wad["filepath"])
+            if mi_data:
+                mi_json = maplist.mapinfo_data_to_json(mi_data)
+                db.update_mapinfo_data(wad_id, mi_json)
+                wad["mapinfo_data"] = mi_json
+
         self.detail_panel.show_wad(wad, tags)
 
     def _on_edit(self, wad_id):
@@ -419,34 +460,100 @@ class MainWindow(QMainWindow):
             )
             return
 
+        wad = db.get_wad_by_id(wad_id)
+        if not wad:
+            return
+
+        if wad.get("is_gameplay_mod"):
+            self._launch_gameplay_mod(wad)
+        else:
+            self._launch_regular_wad(wad)
+
+    def _launch_gameplay_mod(self, wad):
+        """Launch flow for a gameplay mod entry: pick a PWAD to play alongside."""
+        from ui.gameplay_mod_launch_dialog import GameplayModLaunchDialog
+
+        wad_id = wad["id"]
+        wad_filepath = wad["filepath"]
+
+        dlg = GameplayModLaunchDialog(wad["title"], self)
+        if dlg.exec() != dlg.DialogCode.Accepted:
+            return
+
+        selected_pwad = dlg.selected_wad()
+
+        # Build file list: primary WAD first (the PWAD), then gameplay mod after
+        primary_file = None
+        extra_wad_files = []
+        selected_deh = []
+
+        if selected_pwad:
+            primary_file = selected_pwad["filepath"]
+            # Include the PWAD's extra files
+            pwad_extra_wads = db.get_extra_wads(selected_pwad["id"])
+            pwad_deh = wad_importer.find_deh_files(selected_pwad["filepath"])
+            extra_wad_files = pwad_extra_wads + [wad_filepath]
+            selected_deh = pwad_deh
+        else:
+            # No PWAD — just launch the gameplay mod with default IWAD
+            primary_file = wad_filepath
+
+        # Per-WAD extra args (from the gameplay mod entry)
+        parsed_extra_args = self._parse_extra_args(wad_id)
+
+        # Per-WAD source port override
+        binary_override = self._resolve_binary_override(wad_id)
+
+        ok, err, proc = sourceport.launch_wad(
+            primary_file,
+            extra_wad_files=extra_wad_files or None,
+            deh_files=selected_deh or None,
+            extra_args=parsed_extra_args,
+            binary_override=binary_override,
+        )
+        if ok:
+            self.status.showMessage("Launched!", 3000)
+            watcher = ProcessWatcher(proc, wad_id, parent=self)
+            watcher.finished.connect(self._on_process_finished)
+            self._active_watchers[wad_id] = watcher
+            watcher.start()
+        else:
+            QMessageBox.warning(self, "Launch Failed", err)
+
+    def _launch_regular_wad(self, wad):
+        """Launch flow for a regular WAD entry: optional gameplay mod + extra files."""
+        wad_id = wad["id"]
+        wad_filepath = wad["filepath"]
+
         extra_wads = db.get_extra_wads(wad_id)
         deh_files = wad_importer.find_deh_files(wad_filepath)
         all_extra = extra_wads + deh_files
+        gameplay_mods = db.get_gameplay_mods()
 
         selected_extra = []
-        if all_extra:
-            wad = db.get_wad_by_id(wad_id)
-            if wad and wad.get("skip_files_prompt"):
-                selected_extra = all_extra
-            else:
-                dlg = FilesLaunchDialog(all_extra, self)
-                if dlg.exec() != dlg.DialogCode.Accepted:
-                    return
-                selected_extra = dlg.selected_files()
-                if dlg.dont_ask_again():
-                    db.update_skip_files_prompt(wad_id, True)
+        selected_mod = None
+        skip_prompt = wad.get("skip_files_prompt")
+
+        if skip_prompt:
+            selected_extra = all_extra
+        elif all_extra or gameplay_mods:
+            dlg = FilesLaunchDialog(all_extra, self, gameplay_mods=gameplay_mods)
+            if dlg.exec() != dlg.DialogCode.Accepted:
+                return
+            selected_extra = dlg.selected_files()
+            selected_mod = dlg.selected_gameplay_mod()
+            if dlg.dont_ask_again():
+                db.update_skip_files_prompt(wad_id, True)
 
         selected_wads = [f for f in selected_extra if os.path.splitext(f)[1].lower() in (".wad", ".pk3")]
         selected_deh = [f for f in selected_extra if f.lower().endswith(".deh")]
 
+        # Append gameplay mod file after other extra WADs (mod overrides actors)
+        if selected_mod:
+            selected_wads.append(selected_mod["filepath"])
+
         # Per-WAD extra args
-        raw_args = db.get_extra_args(wad_id)
-        parsed_extra_args = None
-        if raw_args:
-            try:
-                parsed_extra_args = shlex.split(raw_args)
-            except ValueError:
-                parsed_extra_args = raw_args.split()
+        parsed_extra_args = self._parse_extra_args(wad_id)
 
         # Auto-warp: inject -warp if enabled and not already in extra args
         auto_warp_on, warp_target = db.get_auto_warp(wad_id)
@@ -458,13 +565,7 @@ class MainWindow(QMainWindow):
                     parsed_extra_args = (parsed_extra_args or []) + warp_args
 
         # Per-WAD source port override
-        binary_override = None
-        sp_profile_id = db.get_sourceport_profile_id(wad_id)
-        if sp_profile_id:
-            binary = sourceport.get_profile_binary(sp_profile_id)
-            if binary:
-                binary_override = binary
-            # If profile was deleted, binary is empty — fall back to active (no override)
+        binary_override = self._resolve_binary_override(wad_id)
 
         ok, err, proc = sourceport.launch_wad(
             wad_filepath,
@@ -481,6 +582,25 @@ class MainWindow(QMainWindow):
             watcher.start()
         else:
             QMessageBox.warning(self, "Launch Failed", err)
+
+    def _parse_extra_args(self, wad_id):
+        """Parse per-WAD extra args string into a list, or None."""
+        raw_args = db.get_extra_args(wad_id)
+        if not raw_args:
+            return None
+        try:
+            return shlex.split(raw_args)
+        except ValueError:
+            return raw_args.split()
+
+    def _resolve_binary_override(self, wad_id):
+        """Return source port binary override for a WAD, or None for default."""
+        sp_profile_id = db.get_sourceport_profile_id(wad_id)
+        if sp_profile_id:
+            binary = sourceport.get_profile_binary(sp_profile_id)
+            if binary:
+                return binary
+        return None
 
     def _on_process_finished(self, wad_id, elapsed_seconds):
         self._active_watchers.pop(wad_id, None)

@@ -127,6 +127,9 @@ class WadEditDialog(QDialog):
         launch_div.setObjectName("editDivider")
         left_layout.addWidget(launch_div)
 
+        self.gameplay_mod_check = StyledCheckBox("Mark as gameplay mod")
+        left_layout.addWidget(self.gameplay_mod_check)
+
         self.skip_prompt_check = StyledCheckBox("Skip files selection dialog on launch")
         left_layout.addWidget(self.skip_prompt_check)
 
@@ -341,6 +344,7 @@ class WadEditDialog(QDialog):
 
         self.desc_text.setPlainText(self._wad.get("description") or "")
         self.map_list_text.setPlainText(self._wad.get("map_list") or "")
+        self.gameplay_mod_check.setChecked(bool(self._wad.get("is_gameplay_mod")))
         self.skip_prompt_check.setChecked(bool(self._wad.get("skip_files_prompt")))
 
         self.extra_args_input.setText(self._wad.get("extra_args") or "")
@@ -532,6 +536,7 @@ class WadEditDialog(QDialog):
                 description=self.desc_text.toPlainText().strip() or "",
                 map_list=self.map_list_text.toPlainText().strip() or "",
             )
+            db.set_gameplay_mod(self._wad_id, self.gameplay_mod_check.isChecked())
             db.update_skip_files_prompt(self._wad_id, self.skip_prompt_check.isChecked())
             db.update_extra_args(self._wad_id, self.extra_args_input.text())
             db.update_auto_warp(

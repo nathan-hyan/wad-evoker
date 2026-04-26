@@ -14,10 +14,12 @@ class WadItemDelegate(QStyledItemDelegate):
     _MULTI_WAD_ROLE = Qt.ItemDataRole.UserRole + 2
     _FINISHED_ROLE = Qt.ItemDataRole.UserRole + 3
     _SEPARATOR_ROLE = Qt.ItemDataRole.UserRole + 4
+    _GAMEPLAY_MOD_ROLE = Qt.ItemDataRole.UserRole + 5
 
     def paint(self, painter, option, index):
         # Separator items get special rendering
-        if index.data(self._SEPARATOR_ROLE):
+        sep_text = index.data(self._SEPARATOR_ROLE)
+        if sep_text:
             painter.save()
             r = option.rect
             painter.fillRect(r, QColor("#0d0d0d"))
@@ -25,7 +27,7 @@ class WadItemDelegate(QStyledItemDelegate):
             font.setBold(True)
             painter.setFont(font)
             fm = painter.fontMetrics()
-            text = "FINISHED"
+            text = sep_text
             text_w = fm.horizontalAdvance(text)
             text_gap = 10
             mid_y = r.center().y()
@@ -42,10 +44,13 @@ class WadItemDelegate(QStyledItemDelegate):
         has_deh = index.data(self._DEH_ROLE)
         has_multi = index.data(self._MULTI_WAD_ROLE)
         is_finished = index.data(self._FINISHED_ROLE)
+        is_gameplay_mod = index.data(self._GAMEPLAY_MOD_ROLE)
 
         tag_w, tag_h = 44, 16
         tag_spacing = 4
         chips = []
+        if is_gameplay_mod:
+            chips.append(("MOD", QColor("#2a1a00"), QColor("#8a6a2a"), QColor("#ddaa44")))
         if is_finished:
             chips.append(("DONE", QColor("#0a2a0a"), QColor("#2a6a2a"), QColor("#44aa44")))
         if has_deh:
@@ -174,21 +179,33 @@ class WadListWidget(QWidget):
         self._wads = wads
         self.list_widget.clear()
 
+        # Split gameplay mods out first
+        gameplay_mods = [w for w in wads if w.get("is_gameplay_mod")]
+        non_mods = [w for w in wads if not w.get("is_gameplay_mod")]
+
         sort_mode = sourceport.get_finished_sort_mode()
         if sort_mode in ("separator", "bottom"):
-            unfinished = [w for w in wads if not w.get("finished")]
-            finished = [w for w in wads if w.get("finished")]
+            unfinished = [w for w in non_mods if not w.get("finished")]
+            finished = [w for w in non_mods if w.get("finished")]
         else:
-            unfinished = wads
+            unfinished = non_mods
             finished = []
 
         for wad in unfinished:
             self._add_wad_item(wad)
 
+        if gameplay_mods:
+            sep = QListWidgetItem()
+            sep.setData(WadItemDelegate._SEPARATOR_ROLE, "GAMEPLAY MODS")
+            sep.setFlags(Qt.ItemFlag.NoItemFlags)
+            self.list_widget.addItem(sep)
+            for wad in gameplay_mods:
+                self._add_wad_item(wad)
+
         if finished:
             if sort_mode == "separator":
                 sep = QListWidgetItem()
-                sep.setData(WadItemDelegate._SEPARATOR_ROLE, True)
+                sep.setData(WadItemDelegate._SEPARATOR_ROLE, "FINISHED")
                 sep.setFlags(Qt.ItemFlag.NoItemFlags)
                 self.list_widget.addItem(sep)
             for wad in finished:
@@ -202,6 +219,7 @@ class WadListWidget(QWidget):
         item.setData(WadItemDelegate._MULTI_WAD_ROLE, bool(wad.get("extra_wads")))
         item.setData(WadItemDelegate._FINISHED_ROLE,
                      bool(wad.get("finished")) and sourceport.get_show_finished_badge())
+        item.setData(WadItemDelegate._GAMEPLAY_MOD_ROLE, bool(wad.get("is_gameplay_mod")))
         item.setToolTip(wad.get("filename", ""))
         self.list_widget.addItem(item)
 

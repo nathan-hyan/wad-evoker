@@ -109,6 +109,72 @@ At import time, `maplist.get_warp_info(filepath)` analyses the WAD/PK3:
 
 ---
 
+## Re-scan Library
+
+- **⚙ Settings → Library → Re-scan Library** triggers a background re-extraction of all WADs
+- `LibraryRescanWorker` (`QThread`) iterates every WAD in the DB:
+  - `mapinfo_data`: **always** re-extracted (picks up parser improvements)
+  - `map_list`: re-extracted only if empty or contains `"lookup"` placeholders
+  - `titlepic_path`: extracted only if currently missing
+- A thin progress bar and `N/N` counter update live during the scan
+- On completion, a summary shows how many entries were updated (e.g. "Done — updated 12 MAPINFO, 3 map lists, 1 titlepics")
+- The library list is automatically refreshed via `parent.refresh_library()`
+- WADs whose files no longer exist on disk are silently skipped
+
+---
+
+## Full MAPINFO extraction
+
+- On WAD select, if `mapinfo_data` is empty, `maplist.extract_mapinfo_data(filepath)` is called (lazy, mirrors titlepic/maplist pattern)
+- Supports `.wad` (via omgifol lump access) and `.pk3` (zip text files + embedded WADs)
+- Lump priority: ZMAPINFO → MAPINFO → UMAPINFO
+- Parser is block-aware: tokenizes the text, identifies top-level blocks (`map`, `episode`, `cluster`/`clusterdef`, `skill`, `clearepisodes`, `clearskills`), and parses `key = value` properties within braces
+- Extracted data structure (stored as JSON in `mapinfo_data` column):
+  - `maps`: per-map properties — title, music, sky, next, secretnext, par time, cluster, levelnum, author
+  - `episodes`: list of episode definitions — start_map, name, pic, key
+  - `skills`: custom skill definitions — name, key, ammofactor, damagefactor
+  - `clusters`: cluster/clusterdef data — flat, music, exittext, entertext
+  - `source`: which lump was parsed ("MAPINFO", "ZMAPINFO", or "UMAPINFO")
+- UMAPINFO-specific: `levelname` → title, `partime` → par, `nextsecret` → secretnext, `episode` property inside map blocks
+- Detail panel displays via `MapInfoWidget`: EPISODES (numbered), SKILLS (bulleted), MAP DETAILS (per-map lines with par, music, sky, flow arrows)
+- Sections auto-hide when no relevant data exists
+
+---
+
+## Gameplay Mods
+
+WADs/PK3s that contain no map lumps are detected at import time. A 3-option dialog asks:
+
+1. **Mark as Gameplay Mod** — sets `is_gameplay_mod = 1`, entry appears in the "GAMEPLAY MODS" section
+2. **Import as Regular WAD** — imports normally despite having no maps
+3. **Cancel** — deletes the just-imported entry and aborts
+
+### Library display
+
+- Gameplay mods are shown in a dedicated section at the **bottom** of the library list (above the "FINISHED" section)
+- A "GAMEPLAY MODS" separator row divides them from regular WADs
+- An orange `[MOD]` badge chip appears on each entry in the list and in the detail panel badge row
+- Gameplay mods are **excluded** from the Recent / Last Played bar
+- The flag is toggleable via the "Mark as gameplay mod" checkbox in the **✎ EDIT** dialog
+
+### Launch flow — from a gameplay mod entry
+
+1. User clicks **▶ LAUNCH** on a gameplay mod
+2. `GameplayModLaunchDialog` opens with a **searchable list** of all non-mod WADs in the library
+3. User picks a PWAD to play alongside, or clicks **Skip (IWAD only)**
+4. Command: `[binary] -file <pwad> <gameplay_mod> [pwad_extra_wads] [-deh pwad_dehs] [extra_args]`
+5. If no PWAD selected: `[binary] -file <gameplay_mod> [extra_args]`
+
+### Launch flow — attaching a gameplay mod to a regular WAD
+
+1. User clicks **▶ LAUNCH** on a regular WAD
+2. If gameplay mods exist in the library **or** the WAD has extra files, `FilesLaunchDialog` appears
+3. The dialog includes a "GAMEPLAY MOD" combo box at the top (if gameplay mods exist) listing all gameplay mods + "None"
+4. The selected mod's file is appended **after** the primary WAD and extra WADs in the `-file` list (mod overrides actors)
+5. "Don't ask again" skips the entire dialog (including mod selection) on future launches
+
+---
+
 ## Context Menu (WAD list)
 
 Right-clicking a WAD in the library list shows:

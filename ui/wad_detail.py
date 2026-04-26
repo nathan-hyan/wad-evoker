@@ -1,5 +1,6 @@
 import os
 
+import maplist
 import sourceport
 import wad_importer
 from PyQt6.QtWidgets import (
@@ -38,6 +39,203 @@ class MapListWidget(QWidget):
         else:
             self.text.setPlainText("")
         self.setVisible(bool(map_list_str))
+
+
+class MapInfoWidget(QWidget):
+    """Collapsible section showing MAPINFO data: episodes, skills, and per-map details."""
+
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        # Source badge (MAPINFO / ZMAPINFO / UMAPINFO)
+        self.source_label = QLabel()
+        self.source_label.setObjectName("mapinfoSource")
+        layout.addWidget(self.source_label)
+
+        # Episodes section
+        self.episodes_container = QWidget()
+        ep_layout = QVBoxLayout(self.episodes_container)
+        ep_layout.setContentsMargins(0, 0, 0, 0)
+        ep_layout.setSpacing(4)
+        ep_lbl = QLabel("EPISODES")
+        ep_lbl.setObjectName("sectionLabel")
+        ep_layout.addWidget(ep_lbl)
+        self.episodes_text = QTextEdit()
+        self.episodes_text.setObjectName("mapinfoText")
+        self.episodes_text.setReadOnly(True)
+        self.episodes_text.setMaximumHeight(100)
+        self.episodes_text.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        ep_layout.addWidget(self.episodes_text)
+        layout.addWidget(self.episodes_container)
+
+        # Skills section
+        self.skills_container = QWidget()
+        sk_layout = QVBoxLayout(self.skills_container)
+        sk_layout.setContentsMargins(0, 0, 0, 0)
+        sk_layout.setSpacing(4)
+        sk_lbl = QLabel("SKILLS")
+        sk_lbl.setObjectName("sectionLabel")
+        sk_layout.addWidget(sk_lbl)
+        self.skills_text = QTextEdit()
+        self.skills_text.setObjectName("mapinfoText")
+        self.skills_text.setReadOnly(True)
+        self.skills_text.setMaximumHeight(100)
+        self.skills_text.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        sk_layout.addWidget(self.skills_text)
+        layout.addWidget(self.skills_container)
+
+        # Per-map details section
+        self.details_container = QWidget()
+        dt_layout = QVBoxLayout(self.details_container)
+        dt_layout.setContentsMargins(0, 0, 0, 0)
+        dt_layout.setSpacing(4)
+        dt_lbl = QLabel("MAP DETAILS")
+        dt_lbl.setObjectName("sectionLabel")
+        dt_layout.addWidget(dt_lbl)
+        self.details_text = QTextEdit()
+        self.details_text.setObjectName("mapinfoText")
+        self.details_text.setReadOnly(True)
+        self.details_text.setMaximumHeight(350)
+        self.details_text.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        dt_layout.addWidget(self.details_text)
+        layout.addWidget(self.details_container)
+
+    @staticmethod
+    def _format_par(seconds):
+        """Format par time seconds into mm:ss."""
+        try:
+            s = int(seconds)
+            return f"{s // 60}:{s % 60:02d}"
+        except (ValueError, TypeError):
+            return str(seconds)
+
+    def set_data(self, data):
+        """
+        data: parsed MAPINFO dict (from maplist.mapinfo_data_from_json), or None.
+        """
+        if not data:
+            self.hide()
+            return
+
+        has_content = False
+
+        # Source label
+        source = data.get("source", "")
+        if source:
+            self.source_label.setText(f"⚙ {source}")
+            self.source_label.show()
+        else:
+            self.source_label.hide()
+
+        # Episodes
+        episodes = data.get("episodes", [])
+        if episodes:
+            lines = []
+            for i, ep in enumerate(episodes, 1):
+                name = ep.get("name", "Unnamed")
+                start = ep.get("start_map", "")
+                line = f"{i}. {name}"
+                if start:
+                    line += f"  (starts at {start})"
+                lines.append(line)
+            self.episodes_text.setPlainText("\n".join(lines))
+            self.episodes_container.show()
+            has_content = True
+        else:
+            self.episodes_container.hide()
+
+        # Skills
+        skills = data.get("skills", [])
+        if skills:
+            lines = []
+            for sk in skills:
+                name = sk.get("name", "Unnamed")
+                key = sk.get("key", "")
+                line = f"• {name}"
+                if key:
+                    line += f"  [{key}]"
+                lines.append(line)
+            self.skills_text.setPlainText("\n".join(lines))
+            self.skills_container.show()
+            has_content = True
+        else:
+            self.skills_container.hide()
+
+        # Per-map details as HTML table
+        maps_data = data.get("maps", {})
+        if maps_data:
+            # Determine which optional columns have data
+            has_par = any(m.get("par") for m in maps_data.values())
+            has_music = any(m.get("music") for m in maps_data.values())
+            has_sky = any(m.get("sky") for m in maps_data.values())
+            has_next = any(m.get("next") for m in maps_data.values())
+            has_secret = any(m.get("secretnext") for m in maps_data.values())
+            has_author = any(m.get("author") for m in maps_data.values())
+
+            hdr_style = "color:#666;font-size:10px;letter-spacing:1px;padding:2px 6px 4px 0;"
+            cell_style = "color:#aaa;font-size:11px;padding:1px 6px 1px 0;white-space:nowrap;"
+            name_style = "color:#cc8844;font-size:11px;padding:1px 6px 1px 0;white-space:nowrap;"
+            title_style = "color:#ccc;font-size:11px;padding:1px 6px 1px 0;"
+
+            html = '<table cellspacing="0" cellpadding="0" style="font-family:Courier New,monospace;">'
+            # Header row
+            html += f'<tr><th style="{hdr_style}">MAP</th><th style="{hdr_style}">TITLE</th>'
+            if has_par:
+                html += f'<th style="{hdr_style}">PAR</th>'
+            if has_music:
+                html += f'<th style="{hdr_style}">MUSIC</th>'
+            if has_sky:
+                html += f'<th style="{hdr_style}">SKY</th>'
+            if has_next:
+                html += f'<th style="{hdr_style}">NEXT</th>'
+            if has_secret:
+                html += f'<th style="{hdr_style}">SECRET</th>'
+            if has_author:
+                html += f'<th style="{hdr_style}">AUTHOR</th>'
+            html += '</tr>'
+
+            for map_name in sorted(maps_data.keys()):
+                info = maps_data[map_name]
+                title = info.get("title", "")
+                html += f'<tr><td style="{name_style}">{map_name}</td>'
+                html += f'<td style="{title_style}">{title}</td>'
+                if has_par:
+                    par = self._format_par(info["par"]) if info.get("par") else ""
+                    html += f'<td style="{cell_style}">{par}</td>'
+                if has_music:
+                    music = info.get("music", "")
+                    if isinstance(music, list):
+                        music = music[0]
+                    if music.startswith("$"):
+                        music = music[1:]
+                    html += f'<td style="{cell_style}">{music}</td>'
+                if has_sky:
+                    sky = info.get("sky", "")
+                    if isinstance(sky, list):
+                        sky = sky[0]
+                    html += f'<td style="{cell_style}">{sky}</td>'
+                if has_next:
+                    nxt = info.get("next", "")
+                    html += f'<td style="{cell_style}">{nxt}</td>'
+                if has_secret:
+                    sec = info.get("secretnext", "")
+                    html += f'<td style="{cell_style}">{sec}</td>'
+                if has_author:
+                    author = info.get("author", "")
+                    html += f'<td style="{cell_style}">{author}</td>'
+                html += '</tr>'
+
+            html += '</table>'
+            self.details_text.setHtml(html)
+            self.details_container.show()
+            has_content = True
+        else:
+            self.details_container.hide()
+
+        self.setVisible(has_content)
 
 
 class TagChip(QWidget):
@@ -292,6 +490,11 @@ class WadDetailPanel(QWidget):
         self.map_list_widget.hide()
         detail_layout.addWidget(self.map_list_widget)
 
+        # MAPINFO section (episodes, skills, map details)
+        self.mapinfo_widget = MapInfoWidget()
+        self.mapinfo_widget.hide()
+        detail_layout.addWidget(self.mapinfo_widget)
+
         # Tags
         self.tags_widget = TagsWidget()
         self.tags_widget.tags_changed.connect(self._on_tags_changed)
@@ -424,6 +627,18 @@ class WadDetailPanel(QWidget):
                 padding: 2px 8px;
             }
 
+            #gameplayModChip {
+                color: #ddaa44;
+                background: #2a1a00;
+                border: 1px solid #8a6a2a;
+                border-radius: 3px;
+                font-family: 'Courier New', monospace;
+                font-size: 10px;
+                font-weight: bold;
+                letter-spacing: 1px;
+                padding: 2px 8px;
+            }
+
             #multiWadChip {
                 color: #6aaaee;
                 background: #1a2a3a;
@@ -434,6 +649,25 @@ class WadDetailPanel(QWidget):
                 font-weight: bold;
                 letter-spacing: 1px;
                 padding: 2px 8px;
+            }
+
+            #mapinfoSource {
+                color: #cc2200;
+                font-size: 10px;
+                font-weight: bold;
+                letter-spacing: 2px;
+                font-family: 'Courier New', monospace;
+                padding: 2px 0;
+            }
+
+            #mapinfoText {
+                background: #111;
+                border: 1px solid #2a2a2a;
+                border-radius: 3px;
+                color: #aaa;
+                font-family: 'Courier New', monospace;
+                font-size: 11px;
+                padding: 6px;
             }
 
             #mapListText {
@@ -517,6 +751,11 @@ class WadDetailPanel(QWidget):
                 item.widget().deleteLater()
         deh_files = wad_importer.find_deh_files(wad.get("filepath", ""))
         has_multi = bool(wad.get("extra_wads"))
+        is_mod = bool(wad.get("is_gameplay_mod"))
+        if is_mod:
+            chip = QLabel("MOD")
+            chip.setObjectName("gameplayModChip")
+            self._badge_row_layout.insertWidget(self._badge_row_layout.count() - 1, chip)
         for _path in deh_files:
             chip = QLabel("DEH")
             chip.setObjectName("dehChip")
@@ -525,7 +764,7 @@ class WadDetailPanel(QWidget):
             chip = QLabel("+WAD")
             chip.setObjectName("multiWadChip")
             self._badge_row_layout.insertWidget(self._badge_row_layout.count() - 1, chip)
-        if deh_files or has_multi:
+        if deh_files or has_multi or is_mod:
             self.badge_row.show()
         else:
             self.badge_row.hide()
@@ -553,12 +792,22 @@ class WadDetailPanel(QWidget):
 
         self.desc_text.setPlainText(wad.get("description") or "No description available.")
 
+        # MAPINFO data
+        mi_json = wad.get("mapinfo_data") or ""
+        mi_data = maplist.mapinfo_data_from_json(mi_json)
+        has_mapinfo_maps = bool(mi_data and mi_data.get("maps"))
+        self.mapinfo_widget.set_data(mi_data)
+
+        # Hide plain map list when MAPINFO provides richer data
         ml = wad.get("map_list") or ""
-        self.map_list_widget.set_maps(ml)
-        if ml:
-            self.map_list_widget.show()
-        else:
+        if has_mapinfo_maps:
             self.map_list_widget.hide()
+        else:
+            self.map_list_widget.set_maps(ml)
+            if ml:
+                self.map_list_widget.show()
+            else:
+                self.map_list_widget.hide()
 
         self.tags_widget.set_tags(tags)
 

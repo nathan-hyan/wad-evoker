@@ -37,7 +37,9 @@ CREATE TABLE wads (
     extra_args        TEXT,               -- user-defined extra launch args string
     sourceport_profile_id INTEGER,         -- per-WAD source port profile override (NULL = use active)
     auto_warp         INTEGER DEFAULT 0,  -- 1 = auto-inject -warp on launch
-    warp_target       TEXT                -- override map name for -warp (NULL = auto-detect from first map)
+    warp_target       TEXT,               -- override map name for -warp (NULL = auto-detect from first map)
+    mapinfo_data      TEXT,               -- JSON blob: full parsed MAPINFO/ZMAPINFO/UMAPINFO data (episodes, skills, per-map props, clusters)
+    is_gameplay_mod   INTEGER DEFAULT 0    -- 1 = WAD is a gameplay mod (no maps, loaded alongside other WADs)
 );
 
 CREATE TABLE tags (

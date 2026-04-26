@@ -43,7 +43,8 @@ wad-evoker/
     ├── last_played.py       # Top "Recent" horizontal card strip
     ├── settings_dialog.py        # Source port binary picker dialog
     ├── update_progress_dialog.py  # Modal progress bar shown during auto-update download/install
-    ├── files_launch_dialog.py     # Modal multi-file selection dialog shown before launch
+    ├── files_launch_dialog.py     # Modal multi-file selection dialog shown before launch (+ optional gameplay mod picker)
+    ├── gameplay_mod_launch_dialog.py # Modal searchable PWAD picker for launching gameplay mods
     └── styled_checkbox.py         # Shared StyledCheckBox widget (custom painted, blood-red indicator)
 ```
 

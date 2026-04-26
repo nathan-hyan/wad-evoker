@@ -2,14 +2,71 @@ import os
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QFileDialog, QFrame, QDialogButtonBox,
-    QListWidget, QListWidgetItem, QMessageBox, QComboBox
+    QListWidget, QListWidgetItem, QMessageBox, QComboBox,
+    QProgressBar
 )
 from ui.styled_checkbox import StyledCheckBox
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
 
+import db
+import maplist
+import titlepic
 import sourceport
 from updater import UpdateCheckWorker, UpdateDownloadWorker, restart_app
 from version import __version__
+
+
+class LibraryRescanWorker(QThread):
+    """Background thread that re-scans all WADs for mapinfo_data, map_list, and titlepic."""
+    progress = pyqtSignal(int, int)       # (current, total)
+    scan_done = pyqtSignal(int, int, int) # (mapinfo_count, maplist_count, titlepic_count)
+
+    def run(self):
+        wads = db.get_all_wads()
+        total = len(wads)
+        mi_count = ml_count = tp_count = 0
+
+        for i, wad in enumerate(wads):
+            wad_id = wad["id"]
+            filepath = wad.get("filepath", "")
+            self.progress.emit(i + 1, total)
+
+            if not filepath or not os.path.isfile(filepath):
+                continue
+
+            # MAPINFO data — always re-extract to pick up parser improvements
+            try:
+                mi_data = maplist.extract_mapinfo_data(filepath)
+                if mi_data:
+                    mi_json = maplist.mapinfo_data_to_json(mi_data)
+                    db.update_mapinfo_data(wad_id, mi_json)
+                    mi_count += 1
+            except Exception:
+                pass
+
+            # Map list — re-extract if empty or contains "lookup"
+            ml_existing = wad.get("map_list") or ""
+            if (not ml_existing.strip()) or ("lookup" in ml_existing.lower()):
+                try:
+                    maps = maplist.extract_maps(filepath)
+                    if maps:
+                        ml = maplist.format_map_list(maps)
+                        db.update_map_list(wad_id, ml)
+                        ml_count += 1
+                except Exception:
+                    pass
+
+            # Titlepic — extract if missing
+            if not wad.get("titlepic_path"):
+                try:
+                    tp = titlepic.extract_titlepic(filepath)
+                    if tp:
+                        db.update_titlepic(wad_id, tp)
+                        tp_count += 1
+                except Exception:
+                    pass
+
+        self.scan_done.emit(mi_count, ml_count, tp_count)
 
 
 class SettingsDialog(QDialog):
@@ -179,6 +236,31 @@ class SettingsDialog(QDialog):
         self.chk_hide_finished.setChecked(sourceport.get_hide_finished_from_recent())
         self.chk_hide_finished.toggled.connect(self._on_hide_finished_changed)
         layout.addWidget(self.chk_hide_finished)
+
+        # Re-scan library
+        rescan_row = QHBoxLayout()
+        rescan_row.setSpacing(8)
+        self.btn_rescan = QPushButton("Re-scan Library")
+        self.btn_rescan.setObjectName("btnRescan")
+        self.btn_rescan.setToolTip(
+            "Re-extract MAPINFO data, map lists, and title pictures\n"
+            "for all WADs in the library."
+        )
+        self.btn_rescan.clicked.connect(self._rescan_library)
+        rescan_row.addWidget(self.btn_rescan)
+
+        self.rescan_status = QLabel("")
+        self.rescan_status.setObjectName("updateStatusLabel")
+        rescan_row.addWidget(self.rescan_status, 1)
+        rescan_row.addStretch()
+        layout.addLayout(rescan_row)
+
+        self.rescan_progress = QProgressBar()
+        self.rescan_progress.setObjectName("rescanProgress")
+        self.rescan_progress.setFixedHeight(6)
+        self.rescan_progress.setTextVisible(False)
+        self.rescan_progress.hide()
+        layout.addWidget(self.rescan_progress)
 
         # ── Software Update ───────────────────────────────────────────────────
         upd_div = QFrame()
@@ -379,6 +461,28 @@ class SettingsDialog(QDialog):
             #btnUpdateNow:hover { background: #aa0000; }
             #btnUpdateNow:disabled { background: #3a1010; color: #666; }
 
+            #btnRescan {
+                background: #1e1e1e;
+                border: 1px solid #3a3a3a;
+                color: #ccc;
+                border-radius: 3px;
+                font-family: 'Courier New', monospace;
+                padding: 6px 14px;
+                font-size: 11px;
+            }
+            #btnRescan:hover { border-color: #cc2200; color: #ff4422; }
+            #btnRescan:disabled { color: #555; border-color: #2a2a2a; }
+
+            #rescanProgress {
+                background: #1a1a1a;
+                border: none;
+                border-radius: 3px;
+            }
+            #rescanProgress::chunk {
+                background: #cc2200;
+                border-radius: 3px;
+            }
+
             #btnCancel {
                 background: #1e1e1e;
                 border: 1px solid #3a3a3a;
@@ -527,6 +631,47 @@ class SettingsDialog(QDialog):
 
     def _on_hide_finished_changed(self, checked):
         sourceport.set_hide_finished_from_recent(checked)
+
+    def _rescan_library(self):
+        self.btn_rescan.setEnabled(False)
+        self.btn_rescan.setText("Scanning…")
+        self.rescan_status.setText("")
+        self.rescan_status.setStyleSheet("")
+        self.rescan_progress.setValue(0)
+        self.rescan_progress.show()
+
+        self._rescan_worker = LibraryRescanWorker()
+        self._rescan_worker.progress.connect(self._on_rescan_progress)
+        self._rescan_worker.scan_done.connect(self._on_rescan_done)
+        self._rescan_worker.start()
+
+    def _on_rescan_progress(self, current, total):
+        self.rescan_progress.setMaximum(total)
+        self.rescan_progress.setValue(current)
+        self.rescan_status.setText(f"{current}/{total}")
+        self.rescan_status.setStyleSheet("color: #888;")
+
+    def _on_rescan_done(self, mi_count, ml_count, tp_count):
+        self.btn_rescan.setEnabled(True)
+        self.btn_rescan.setText("Re-scan Library")
+        self.rescan_progress.hide()
+        parts = []
+        if mi_count:
+            parts.append(f"{mi_count} MAPINFO")
+        if ml_count:
+            parts.append(f"{ml_count} map lists")
+        if tp_count:
+            parts.append(f"{tp_count} titlepics")
+        if parts:
+            self.rescan_status.setText(f"Done — updated {', '.join(parts)}")
+            self.rescan_status.setStyleSheet("color: #44aa44;")
+        else:
+            self.rescan_status.setText("Done — nothing new to extract.")
+            self.rescan_status.setStyleSheet("color: #888;")
+        # Notify parent to refresh
+        parent = self.parent()
+        if parent and hasattr(parent, "refresh_library"):
+            parent.refresh_library()
 
     # ── Software Update ───────────────────────────────────────────────────────
 

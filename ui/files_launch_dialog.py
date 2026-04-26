@@ -2,7 +2,7 @@ import os
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QFrame
+    QPushButton, QFrame, QComboBox
 )
 from PyQt6.QtCore import Qt
 from ui.styled_checkbox import StyledCheckBox
@@ -15,13 +15,15 @@ class FilesLaunchDialog(QDialog):
     Also offers a 'Don't ask again for this mod' option stored per-entry in the DB.
     """
 
-    def __init__(self, extra_files, parent=None):
+    def __init__(self, extra_files, parent=None, gameplay_mods=None):
         super().__init__(parent)
-        self.setWindowTitle("Multiple Files Found")
+        self.setWindowTitle("Launch Options")
         self.setModal(True)
         self.setMinimumWidth(460)
         self._checkboxes = []
         self._dont_ask_cb = None
+        self._gameplay_mods = gameplay_mods or []
+        self._mod_combo = None
         self._build_ui(extra_files)
         self._apply_styles()
 
@@ -31,29 +33,48 @@ class FilesLaunchDialog(QDialog):
         layout.setSpacing(14)
         layout.setSizeConstraint(layout.SizeConstraint.SetFixedSize)
 
-        title = QLabel("MULTIPLE FILES FOUND")
+        title = QLabel("LAUNCH OPTIONS")
         title.setObjectName("dlgTitle")
         layout.addWidget(title)
 
-        desc = QLabel(
-            "This mod contains multiple files that can be loaded.\n"
-            "Select which files to include when launching:"
-        )
-        desc.setObjectName("dlgDesc")
-        desc.setWordWrap(True)
-        layout.addWidget(desc)
+        # Gameplay mod picker (optional)
+        if self._gameplay_mods:
+            mod_lbl = QLabel("GAMEPLAY MOD")
+            mod_lbl.setObjectName("sectionLabel")
+            layout.addWidget(mod_lbl)
 
-        div = QFrame()
-        div.setFrameShape(QFrame.Shape.HLine)
-        div.setObjectName("dlgDivider")
-        layout.addWidget(div)
+            self._mod_combo = QComboBox()
+            self._mod_combo.setObjectName("modCombo")
+            self._mod_combo.addItem("None", None)
+            for mod in self._gameplay_mods:
+                self._mod_combo.addItem(mod["title"], mod)
+            layout.addWidget(self._mod_combo)
 
-        for path in extra_files:
-            cb = StyledCheckBox(os.path.basename(path))
-            cb.setChecked(True)
-            cb._file_path = path
-            self._checkboxes.append(cb)
-            layout.addWidget(cb)
+            mod_div = QFrame()
+            mod_div.setFrameShape(QFrame.Shape.HLine)
+            mod_div.setObjectName("dlgDivider")
+            layout.addWidget(mod_div)
+
+        if extra_files:
+            desc = QLabel(
+                "This mod contains multiple files that can be loaded.\n"
+                "Select which files to include when launching:"
+            )
+            desc.setObjectName("dlgDesc")
+            desc.setWordWrap(True)
+            layout.addWidget(desc)
+
+            div = QFrame()
+            div.setFrameShape(QFrame.Shape.HLine)
+            div.setObjectName("dlgDivider")
+            layout.addWidget(div)
+
+            for path in extra_files:
+                cb = StyledCheckBox(os.path.basename(path))
+                cb.setChecked(True)
+                cb._file_path = path
+                self._checkboxes.append(cb)
+                layout.addWidget(cb)
 
         div2 = QFrame()
         div2.setFrameShape(QFrame.Shape.HLine)
@@ -142,6 +163,31 @@ class FilesLaunchDialog(QDialog):
                 border-color: #666;
                 color: #e8e0d0;
             }
+            #sectionLabel {
+                color: #666;
+                font-size: 10px;
+                letter-spacing: 3px;
+                font-family: 'Courier New', monospace;
+            }
+            #modCombo {
+                background: #1a1a1a;
+                border: 1px solid #3a3a3a;
+                border-radius: 3px;
+                color: #e8e0d0;
+                font-family: 'Courier New', monospace;
+                font-size: 12px;
+                padding: 6px 10px;
+            }
+            #modCombo:hover { border-color: #8a6a2a; }
+            #modCombo QAbstractItemView {
+                background: #1a1a1a;
+                color: #e8e0d0;
+                border: 1px solid #3a3a3a;
+                selection-background-color: #2a1a00;
+                selection-color: #ddaa44;
+                font-family: 'Courier New', monospace;
+                font-size: 12px;
+            }
         """)
 
     def selected_files(self):
@@ -151,6 +197,12 @@ class FilesLaunchDialog(QDialog):
     def dont_ask_again(self):
         """Return True if the user checked 'Don't ask again'."""
         return self._dont_ask_cb.isChecked()
+
+    def selected_gameplay_mod(self):
+        """Return the selected gameplay mod WAD dict, or None."""
+        if self._mod_combo is None:
+            return None
+        return self._mod_combo.currentData()
 
 
 # Keep old name as alias for backwards compatibility
